@@ -5,8 +5,11 @@
 ```bash
 cargo build
 cargo test
-cargo clippy --all-targets
+cargo clippy --all-targets -- -D warnings
 ```
+
+CI (`.github/workflows/ci.yml`) runs the same clippy and test commands on
+Ubuntu for every pull request and every push to `main`; both must pass.
 
 The 5-year performance check from milestone M1 (target: under 5 minutes on an
 M-series Mac):
