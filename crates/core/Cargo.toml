@@ -1,0 +1,26 @@
+[package]
+name = "mirrorself-core"
+description = "MirrorSelf core: schema, encrypted raw vault, processing pipeline and QueryService"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+rusqlite.workspace = true
+quick-xml.workspace = true
+zip.workspace = true
+aes-gcm.workspace = true
+hmac.workspace = true
+sha2.workspace = true
+hkdf.workspace = true
+getrandom.workspace = true
+hex.workspace = true
+toml.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
