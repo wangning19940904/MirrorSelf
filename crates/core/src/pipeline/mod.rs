@@ -1,15 +1,17 @@
 //! Processing pipeline (architecture §5): raw vault → parse → normalize →
 //! derive → link → index.
 //!
-//! Per-object parsers run once per raw object and processor version.
-//! Whole-index stages (dedupe, daily metrics, sleep sessions, links, search)
-//! run after any parser output changes. Every run is recorded in
+//! Per-object processors run once per raw object and processor version, as
+//! a chain per kind (a checkup report is OCR'd, then extracted). Whole-index
+//! stages (dedupe, op replay, daily metrics, sleep sessions, links, search)
+//! run after any per-object output changes. Every run is recorded in
 //! `processor_runs`, so each output can be traced to the code that made it.
 
 mod apple_health;
 mod dedupe;
 mod derive;
 mod link;
+pub mod report;
 mod sleep;
 
 use std::collections::HashSet;
@@ -23,6 +25,8 @@ use serde_json::Value;
 use crate::config::PipelineConfig;
 use crate::ids::stable_id;
 use crate::importers;
+use crate::models::ModelProvider;
+use crate::ops;
 use crate::time::now_utc_string;
 use crate::vault::{RawMeta, Vault};
 
@@ -37,18 +41,33 @@ pub const APPLE_HEALTH_PARSE: Processor = Processor {
     version: "1.0.0",
 };
 
+pub const REPORT_OCR: Processor = Processor {
+    name: "report.ocr",
+    version: "1.0.0",
+};
+
+pub const REPORT_EXTRACT: Processor = Processor {
+    name: "report.extract",
+    version: "1.0.0",
+};
+
 pub const GLOBAL_STAGES: &[Processor] = &[
     Processor { name: "normalize.dedupe", version: "1.0.0" },
+    Processor { name: "ops.replay", version: "1.0.0" },
     Processor { name: "derive.daily_metrics", version: "1.0.0" },
     Processor { name: "derive.sleep_sessions", version: "1.0.0" },
-    Processor { name: "link.rules", version: "1.0.0" },
-    Processor { name: "index.search", version: "1.0.0" },
+    // 1.1.0: providers from checkup reports.
+    Processor { name: "link.rules", version: "1.1.0" },
+    // 1.1.0: documents and lab analytes.
+    Processor { name: "index.search", version: "1.1.0" },
 ];
 
-fn parser_for(kind: &str) -> Option<Processor> {
+/// The per-object processors for a kind, in order.
+fn chain_for(kind: &str) -> &'static [Processor] {
     match kind {
-        importers::apple_health::KIND => Some(APPLE_HEALTH_PARSE),
-        _ => None,
+        importers::apple_health::KIND => &[APPLE_HEALTH_PARSE],
+        importers::report::KIND => &[REPORT_OCR, REPORT_EXTRACT],
+        _ => &[],
     }
 }
 
@@ -86,6 +105,7 @@ pub fn process(
     conn: &Connection,
     vault: &Vault,
     cfg: &PipelineConfig,
+    models: &dyn ModelProvider,
     rebuild: bool,
 ) -> Result<ProcessReport> {
     let started = Instant::now();
@@ -100,7 +120,14 @@ pub fn process(
 
     let pending = pending_raw(conn)?;
     for raw in &pending {
-        report.runs.push(run_parser(conn, vault, cfg, raw)?);
+        for p in &chain_for(&raw.kind)[raw.from..] {
+            let run = run_stage(conn, vault, cfg, models, raw, p)?;
+            let ok = run.status == "ok";
+            report.runs.push(run);
+            if !ok {
+                break;
+            }
+        }
     }
     if rebuild || !pending.is_empty() || global_stale(conn)? {
         report.runs.extend(run_global(conn, cfg)?);
@@ -132,10 +159,11 @@ pub(crate) fn insert_raw(conn: &Connection, vault: &Vault, id: &str, meta: &RawM
 }
 
 /// Re-registers vault objects the index doesn't know, e.g. after `index.db`
-/// was deleted or the vault was synced from another host.
+/// was deleted or the vault was synced from another host. User ops go back
+/// into the op log; everything else is a raw object.
 fn register_vault_objects(conn: &Connection, vault: &Vault) -> Result<usize> {
     let known: HashSet<String> = conn
-        .prepare("SELECT id FROM raw_objects")?
+        .prepare("SELECT id FROM raw_objects UNION ALL SELECT id FROM ops_log")?
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     let mut added = 0;
@@ -143,8 +171,11 @@ fn register_vault_objects(conn: &Connection, vault: &Vault) -> Result<usize> {
         if known.contains(&id) {
             continue;
         }
-        let (meta, _) = vault.get(&id)?;
-        if insert_raw(conn, vault, &id, &meta)? {
+        let (meta, content) = vault.get(&id)?;
+        if meta.kind == ops::KIND {
+            let op: ops::Op = serde_json::from_slice(&content)?;
+            ops::insert(conn, &id, &op)?;
+        } else if insert_raw(conn, vault, &id, &meta)? {
             added += 1;
         }
     }
@@ -159,6 +190,7 @@ fn clear_derived(conn: &Connection) -> Result<()> {
          DELETE FROM observations;
          DELETE FROM events;
          DELETE FROM documents;
+         DELETE FROM document_pages;
          DELETE FROM links WHERE method != 'user';
          DELETE FROM entities;
          DELETE FROM episodes;
@@ -173,6 +205,8 @@ fn clear_derived(conn: &Connection) -> Result<()> {
 struct PendingRaw {
     id: String,
     kind: String,
+    /// The first processor of the kind's chain that has to run.
+    from: usize,
 }
 
 fn pending_raw(conn: &Connection) -> Result<Vec<PendingRaw>> {
@@ -182,28 +216,41 @@ fn pending_raw(conn: &Connection) -> Result<Vec<PendingRaw>> {
         .collect::<rusqlite::Result<_>>()?;
     let mut out = Vec::new();
     for kind in kinds {
-        let Some(p) = parser_for(&kind) else { continue };
-        // A new parser version reprocesses every object of its kind from
-        // scratch, in import order, so ownership of shared records stays stable.
-        let stale: i64 = conn.query_row(
-            "SELECT count(*) FROM processor_runs WHERE processor = ?1 AND version != ?2",
-            params![p.name, p.version],
-            |r| r.get(0),
-        )?;
-        if stale > 0 {
-            clear_parser_outputs(conn, &p)?;
+        let chain = chain_for(&kind);
+        for p in chain {
+            // A new processor version reprocesses every object of its kind
+            // from scratch, in import order, so ownership of shared records
+            // stays stable.
+            let stale: i64 = conn.query_row(
+                "SELECT count(*) FROM processor_runs WHERE processor = ?1 AND version != ?2",
+                params![p.name, p.version],
+                |r| r.get(0),
+            )?;
+            if stale > 0 {
+                clear_parser_outputs(conn, p)?;
+            }
         }
-        let mut stmt = conn.prepare(
-            "SELECT r.id FROM raw_objects r
-             WHERE r.kind = ?1 AND NOT EXISTS (
-               SELECT 1 FROM processor_runs pr
-               WHERE pr.raw_id = r.id AND pr.processor = ?2 AND pr.version = ?3 AND pr.status = 'ok')
-             ORDER BY r.received_at, r.id",
+        let ids: Vec<String> = conn
+            .prepare("SELECT id FROM raw_objects WHERE kind = ?1 ORDER BY received_at, id")?
+            .query_map([&kind], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut done = conn.prepare_cached(
+            "SELECT count(*) FROM processor_runs
+             WHERE raw_id = ?1 AND processor = ?2 AND version = ?3 AND status = 'ok'",
         )?;
-        let ids = stmt
-            .query_map(params![kind, p.name, p.version], |r| r.get::<_, String>(0))?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        out.extend(ids.into_iter().map(|id| PendingRaw { id, kind: kind.clone() }));
+        for id in ids {
+            let mut from = None;
+            for (i, p) in chain.iter().enumerate() {
+                let ok: i64 = done.query_row(params![id, p.name, p.version], |r| r.get(0))?;
+                if ok == 0 {
+                    from = Some(i);
+                    break;
+                }
+            }
+            if let Some(from) = from {
+                out.push(PendingRaw { id, kind: kind.clone(), from });
+            }
+        }
     }
     Ok(out)
 }
@@ -218,8 +265,25 @@ fn clear_parser_outputs(conn: &Connection, p: &Processor) -> Result<()> {
         "DELETE FROM events WHERE derived = 0 AND run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
         [p.name],
     )?;
+    tx.execute(
+        "DELETE FROM document_pages WHERE run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
+        [p.name],
+    )?;
+    tx.execute(
+        "DELETE FROM documents WHERE run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
+        [p.name],
+    )?;
     tx.execute("DELETE FROM processor_runs WHERE processor = ?1", [p.name])?;
     tx.commit()?;
+    Ok(())
+}
+
+/// Removes what an earlier run of `run` (same processor, version and raw
+/// object) wrote, so re-running after an upstream change starts clean.
+fn clear_run_outputs(conn: &Connection, run: &str) -> Result<()> {
+    conn.execute("DELETE FROM observations WHERE run_id = ?1", [run])?;
+    conn.execute("DELETE FROM events WHERE derived = 0 AND run_id = ?1", [run])?;
+    conn.execute("DELETE FROM document_pages WHERE run_id = ?1", [run])?;
     Ok(())
 }
 
@@ -267,17 +331,38 @@ fn record_run(
     Ok(())
 }
 
-fn run_parser(conn: &Connection, vault: &Vault, cfg: &PipelineConfig, raw: &PendingRaw) -> Result<RunReport> {
-    let p = parser_for(&raw.kind).expect("pending_raw only lists kinds with a parser");
-    let run = run_id(&p, Some(&raw.id));
+fn run_stage(
+    conn: &Connection,
+    vault: &Vault,
+    cfg: &PipelineConfig,
+    models: &dyn ModelProvider,
+    raw: &PendingRaw,
+    p: &Processor,
+) -> Result<RunReport> {
+    let run = run_id(p, Some(&raw.id));
     let started_at = now_utc_string();
     let timer = Instant::now();
 
     let result = (|| -> Result<Value> {
-        let (_, content) = vault.get(&raw.id)?;
         let tx = conn.unchecked_transaction()?;
-        let outputs = apple_health::load(&tx, cfg, &raw.id, &run, &content)?;
-        record_run(&tx, &run, &p, Some(&raw.id), "ok", &started_at, Some(&outputs), None)?;
+        clear_run_outputs(&tx, &run)?;
+        let outputs = match p.name {
+            "apple_health.parse" => {
+                let (_, content) = vault.get(&raw.id)?;
+                apple_health::load(&tx, cfg, &raw.id, &run, &content)?
+            }
+            "report.ocr" => {
+                let (meta, content) = vault.get(&raw.id)?;
+                report::ocr(&tx, models, &raw.id, &run, &meta, &content)?
+            }
+            "report.extract" => {
+                let received_at: String =
+                    tx.query_row("SELECT received_at FROM raw_objects WHERE id = ?1", [&raw.id], |r| r.get(0))?;
+                report::extract(&tx, models, cfg, &raw.id, &run, &received_at)?
+            }
+            other => unreachable!("no processor named {other}"),
+        };
+        record_run(&tx, &run, p, Some(&raw.id), "ok", &started_at, Some(&outputs), None)?;
         tx.commit()?;
         Ok(outputs)
     })();
@@ -286,7 +371,7 @@ fn run_parser(conn: &Connection, vault: &Vault, cfg: &PipelineConfig, raw: &Pend
         Ok(outputs) => ("ok", outputs, None),
         Err(err) => {
             let msg = format!("{err:#}");
-            record_run(conn, &run, &p, Some(&raw.id), "error", &started_at, None, Some(&msg))?;
+            record_run(conn, &run, p, Some(&raw.id), "error", &started_at, None, Some(&msg))?;
             ("error", Value::Null, Some(msg))
         }
     };
@@ -310,6 +395,7 @@ fn run_global(conn: &Connection, cfg: &PipelineConfig) -> Result<Vec<RunReport>>
         let tx = conn.unchecked_transaction()?;
         let outputs = match p.name {
             "normalize.dedupe" => dedupe::run(&tx)?,
+            "ops.replay" => ops::replay(&tx)?,
             "derive.daily_metrics" => derive::run(&tx, cfg)?,
             "derive.sleep_sessions" => sleep::run(&tx, &run)?,
             "link.rules" => link::run(&tx)?,

@@ -11,7 +11,9 @@ use serde_json::{json, Value};
 use crate::config::{Config, Home};
 use crate::crypto::{random_bytes, VaultKey};
 use crate::error::{conflict, invalid, not_found, UserError};
-use crate::importers::apple_health;
+use crate::importers::{apple_health, report};
+use crate::models::{self, DocumentInput, ModelProvider, OcrDocument};
+use crate::ops::{self, Edit};
 use crate::pipeline::{self, ProcessReport};
 use crate::query::QueryService;
 use crate::storage;
@@ -22,6 +24,39 @@ use crate::db;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportKind {
     AppleHealth,
+    /// A checkup report or lab sheet (PDF or photo), with a language hint.
+    Report(Option<Lang>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lang {
+    Zh,
+    En,
+}
+
+impl Lang {
+    pub fn parse(s: &str) -> Result<Self> {
+        match s {
+            "zh" | "zh-Hans" | "zh-CN" => Ok(Lang::Zh),
+            "en" | "en-US" | "en-GB" => Ok(Lang::En),
+            other => Err(invalid(format!("language '{other}' must be zh or en"))),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Lang::Zh => "zh",
+            Lang::En => "en",
+        }
+    }
+}
+
+/// A review decision on one extracted lab value.
+#[derive(Debug, Clone)]
+pub enum Decision {
+    Confirm,
+    Edit(Edit),
+    Reject { reason: Option<String> },
 }
 
 #[derive(Debug, Serialize)]
@@ -47,6 +82,7 @@ pub struct App {
     config: Config,
     vault: Vault,
     conn: Connection,
+    models: Box<dyn ModelProvider>,
 }
 
 impl App {
@@ -85,13 +121,27 @@ impl App {
         if !home.is_initialized() {
             return Err(UserError::NotInitialized(home.root().to_path_buf()).into());
         }
-        let config = Config::load(&home)?;
+        let mut config = Config::load(&home)?;
+        if config.node_id.is_none() {
+            config.node_id = Some(hex::encode(random_bytes::<4>()));
+            config.save(&home)?;
+        }
+        let models = models::from_config(&config.models)?;
         let key_hex = fs::read_to_string(home.key_path())
             .with_context(|| format!("reading {}", home.key_path().display()))?;
         let key = VaultKey::from_hex(&key_hex)?;
         let vault = Vault::new(storage::open(&config.storage)?, &key);
         let conn = db::open(&home.index_path(), vault.subkeys())?;
-        Ok(Self { home, config, vault, conn })
+        Ok(Self { home, config, vault, conn, models })
+    }
+
+    /// Replaces the OCR and extraction provider chosen from the config.
+    pub fn set_model_provider(&mut self, models: Box<dyn ModelProvider>) {
+        self.models = models;
+    }
+
+    pub fn model_provider(&self) -> &dyn ModelProvider {
+        self.models.as_ref()
     }
 
     pub fn home(&self) -> &Home {
@@ -152,6 +202,22 @@ impl App {
                     origin_ref: name,
                     received_at: now_utc_precise(),
                     bytes: content.len() as u64,
+                    lang: None,
+                }
+            }
+            ImportKind::Report(lang) => {
+                let mime = report::sniff(content).ok_or_else(|| {
+                    invalid("not a supported report file (expected a PDF, JPEG, PNG, HEIC or TIFF)")
+                })?;
+                RawMeta {
+                    source: report::SOURCE.into(),
+                    kind: report::KIND.into(),
+                    mime: mime.into(),
+                    name: name.clone(),
+                    origin_ref: name,
+                    received_at: now_utc_precise(),
+                    bytes: content.len() as u64,
+                    lang: lang.map(|l| l.as_str().to_string()),
                 }
             }
         };
@@ -169,7 +235,48 @@ impl App {
     }
 
     pub fn process(&self, rebuild: bool) -> Result<ProcessReport> {
-        pipeline::process(&self.conn, &self.vault, &self.config.pipeline, rebuild)
+        pipeline::process(&self.conn, &self.vault, &self.config.pipeline, self.models.as_ref(), rebuild)
+    }
+
+    /// Runs the configured provider's OCR on a file without importing it
+    /// (`mirrorself dev ocr`, used to record fixtures).
+    pub fn ocr_bytes(&self, content: &[u8], lang: Option<Lang>) -> Result<OcrDocument> {
+        let mime = report::sniff(content).ok_or_else(|| invalid("not a supported report file"))?;
+        self.models.ocr(&DocumentInput { mime, bytes: content, lang: lang.map(Lang::as_str) })
+    }
+
+    /// Records a review decision as a user op (in the vault and the op log)
+    /// and applies it. Returns the updated review item.
+    pub fn review(&self, id: &str, decision: Decision, actor: &str) -> Result<Value> {
+        let row: Option<(String, Option<i64>, Option<String>, String)> = self
+            .conn
+            .query_row(
+                "SELECT raw_id, page, label, status FROM observations
+                 WHERE id = ?1 AND code_system IN ('loinc', 'local')",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .optional()?;
+        let Some((raw_id, page, label, status)) = row else {
+            return Err(not_found(format!("no extracted lab value '{id}' (see `mirrorself review list`)")));
+        };
+        if matches!(status.as_str(), "superseded" | "duplicate") {
+            return Err(conflict(format!("lab value '{id}' is {status} and cannot be reviewed")));
+        }
+        let matcher = json!({ "raw_id": raw_id, "page": page, "label": label });
+        let (op, payload) = match decision {
+            Decision::Confirm => (ops::CONFIRM, json!({ "match": matcher })),
+            Decision::Edit(edit) => {
+                ops::check_edit(&edit).map_err(invalid)?;
+                (ops::EDIT, json!({ "match": matcher, "edit": edit }))
+            }
+            Decision::Reject { reason } => (ops::REJECT, json!({ "match": matcher, "reason": reason })),
+        };
+        let node = self.config.node_id.as_deref().unwrap_or("local");
+        let (op_id, _) = ops::append(&self.conn, &self.vault, node, actor, op, id, payload)?;
+        let mut item = self.query().review_item(id)?;
+        item["op_id"] = json!(op_id);
+        Ok(item)
     }
 
     pub fn raw_list(&self) -> Result<Value> {

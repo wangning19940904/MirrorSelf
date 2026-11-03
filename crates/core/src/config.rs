@@ -70,6 +70,22 @@ pub struct Config {
     pub pipeline: PipelineConfig,
     #[serde(default)]
     pub server: ServerConfig,
+    #[serde(default)]
+    pub models: ModelsConfig,
+    /// Identifies this host in the user op log's hybrid logical clock.
+    #[serde(default)]
+    pub node_id: Option<String>,
+}
+
+/// OCR and extraction for checkup reports (`[models]`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ModelsConfig {
+    /// `apple-vision` (default on macOS), `recorded:<dir>` or `none`.
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// A prebuilt OCR helper binary instead of compiling it on first use.
+    #[serde(default)]
+    pub helper: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,6 +97,9 @@ pub struct PipelineConfig {
     /// |z| at or above this marks a daily value as notable on the timeline.
     #[serde(default = "default_notable_z")]
     pub notable_z: f64,
+    /// Extracted lab values below this confidence go to the review queue.
+    #[serde(default = "default_review_confidence")]
+    pub review_confidence: f64,
 }
 
 impl Default for PipelineConfig {
@@ -88,6 +107,7 @@ impl Default for PipelineConfig {
         Self {
             sleep_day_boundary_hour: default_sleep_boundary(),
             notable_z: default_notable_z(),
+            review_confidence: default_review_confidence(),
         }
     }
 }
@@ -98,6 +118,10 @@ fn default_sleep_boundary() -> u32 {
 
 fn default_notable_z() -> f64 {
     2.0
+}
+
+fn default_review_confidence() -> f64 {
+    0.9
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +149,8 @@ impl Config {
             storage: storage.into(),
             pipeline: PipelineConfig::default(),
             server: ServerConfig::default(),
+            models: ModelsConfig::default(),
+            node_id: Some(hex::encode(crate::crypto::random_bytes::<4>())),
         }
     }
 

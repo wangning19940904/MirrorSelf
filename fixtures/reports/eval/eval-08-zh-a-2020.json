@@ -1,0 +1,465 @@
+{
+  "id": "eval-08-zh-a-2020",
+  "language": "zh",
+  "provider": "青松健康体检中心（示例）",
+  "title": "健康体检报告",
+  "header": [
+    "姓名：测试用户",
+    "性别：男",
+    "年龄：37岁",
+    "体检编号：T20200217",
+    "体检日期：2020/02/17"
+  ],
+  "columns": [
+    {
+      "key": "name",
+      "label": "项目",
+      "x": 50.0
+    },
+    {
+      "key": "value",
+      "label": "结果",
+      "x": 250.0
+    },
+    {
+      "key": "flag",
+      "label": "提示",
+      "x": 315.0
+    },
+    {
+      "key": "unit",
+      "label": "单位",
+      "x": 360.0
+    },
+    {
+      "key": "range",
+      "label": "参考范围",
+      "x": 460.0
+    }
+  ],
+  "pages": [
+    {
+      "sections": [
+        {
+          "title": "血常规",
+          "rows": [
+            {
+              "name": "白细胞(WBC)",
+              "value": "1.24",
+              "flag": "↓",
+              "unit": "×10⁹/L",
+              "range": "3.50-9.50",
+              "truth": {
+                "loinc": "6690-2",
+                "value": 1.24,
+                "value_text": null,
+                "unit": "10*9/L",
+                "ref_low": 3.5,
+                "ref_high": 9.5,
+                "flag": "↓"
+              }
+            },
+            {
+              "name": "红细胞计数(RBC)",
+              "value": "5.01",
+              "unit": "×10¹²/L",
+              "range": "4.30-5.80",
+              "truth": {
+                "loinc": "789-8",
+                "value": 5.01,
+                "value_text": null,
+                "unit": "10*12/L",
+                "ref_low": 4.3,
+                "ref_high": 5.8,
+                "flag": null
+              }
+            },
+            {
+              "name": "血红蛋白(HGB)",
+              "value": "163",
+              "unit": "g/L",
+              "range": "130-175",
+              "truth": {
+                "loinc": "718-7",
+                "value": 163.0,
+                "value_text": null,
+                "unit": "g/L",
+                "ref_low": 130.0,
+                "ref_high": 175.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "红细胞比容(HCT)",
+              "value": "54.0",
+              "flag": "↑",
+              "unit": "%",
+              "range": "40.0-50.0",
+              "truth": {
+                "loinc": "4544-3",
+                "value": 54.0,
+                "value_text": null,
+                "unit": "%",
+                "ref_low": 40.0,
+                "ref_high": 50.0,
+                "flag": "↑"
+              }
+            },
+            {
+              "name": "平均红细胞体积(MCV)",
+              "value": "89.6",
+              "unit": "fL",
+              "range": "82.0-100.0",
+              "truth": {
+                "loinc": "787-2",
+                "value": 89.6,
+                "value_text": null,
+                "unit": "fL",
+                "ref_low": 82.0,
+                "ref_high": 100.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "血小板计数(PLT)",
+              "value": "220",
+              "unit": "×10⁹/L",
+              "range": "125-350",
+              "truth": {
+                "loinc": "777-3",
+                "value": 220.0,
+                "value_text": null,
+                "unit": "10*9/L",
+                "ref_low": 125.0,
+                "ref_high": 350.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "中性粒细胞百分比(NEUT%)",
+              "value": "54.3",
+              "unit": "%",
+              "range": "40.0-75.0",
+              "truth": {
+                "loinc": "770-8",
+                "value": 54.3,
+                "value_text": null,
+                "unit": "%",
+                "ref_low": 40.0,
+                "ref_high": 75.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "淋巴细胞百分比(LYMPH%)",
+              "value": "60.4",
+              "flag": "↑",
+              "unit": "%",
+              "range": "20.0-50.0",
+              "truth": {
+                "loinc": "736-9",
+                "value": 60.4,
+                "value_text": null,
+                "unit": "%",
+                "ref_low": 20.0,
+                "ref_high": 50.0,
+                "flag": "↑"
+              }
+            }
+          ]
+        },
+        {
+          "title": "血脂",
+          "rows": [
+            {
+              "name": "总胆固醇(TC)",
+              "value": "4.57",
+              "unit": "mmol/L",
+              "range": "<5.20",
+              "truth": {
+                "loinc": "2093-3",
+                "value": 4.57,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": null,
+                "ref_high": 5.2,
+                "flag": null
+              }
+            },
+            {
+              "name": "甘油三酯(TG)",
+              "value": "1.50",
+              "unit": "mmol/L",
+              "range": "<1.70",
+              "truth": {
+                "loinc": "2571-8",
+                "value": 1.5,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": null,
+                "ref_high": 1.7,
+                "flag": null
+              }
+            },
+            {
+              "name": "高密度脂蛋白胆固醇(HDL-C)",
+              "value": "1.16",
+              "unit": "mmol/L",
+              "range": ">1.04",
+              "truth": {
+                "loinc": "2085-9",
+                "value": 1.16,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 1.04,
+                "ref_high": null,
+                "flag": null
+              }
+            },
+            {
+              "name": "低密度脂蛋白胆固醇(LDL-C)",
+              "value": "3.04",
+              "unit": "mmol/L",
+              "range": "<3.40",
+              "truth": {
+                "loinc": "13457-7",
+                "value": 3.04,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": null,
+                "ref_high": 3.4,
+                "flag": null
+              }
+            }
+          ]
+        }
+      ],
+      "notes": []
+    },
+    {
+      "sections": [
+        {
+          "title": "生化检查",
+          "rows": [
+            {
+              "name": "空腹血糖(GLU)",
+              "value": "5.02",
+              "unit": "mmol/L",
+              "range": "3.90-6.10",
+              "truth": {
+                "loinc": "1558-6",
+                "value": 5.02,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 3.9,
+                "ref_high": 6.1,
+                "flag": null
+              }
+            },
+            {
+              "name": "糖化血红蛋白(HbA1c)",
+              "value": "5.5",
+              "unit": "%",
+              "range": "4.0-6.0",
+              "truth": {
+                "loinc": "4548-4",
+                "value": 5.5,
+                "value_text": null,
+                "unit": "%",
+                "ref_low": 4.0,
+                "ref_high": 6.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "谷丙转氨酶(ALT)",
+              "value": "38",
+              "unit": "U/L",
+              "range": "9-50",
+              "truth": {
+                "loinc": "1742-6",
+                "value": 38.0,
+                "value_text": null,
+                "unit": "U/L",
+                "ref_low": 9.0,
+                "ref_high": 50.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "天门冬氨酸氨基转移酶(AST)",
+              "value": "33",
+              "unit": "U/L",
+              "range": "15-40",
+              "truth": {
+                "loinc": "1920-8",
+                "value": 33.0,
+                "value_text": null,
+                "unit": "U/L",
+                "ref_low": 15.0,
+                "ref_high": 40.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "γ-谷氨酰转移酶(GGT)",
+              "value": "42",
+              "unit": "U/L",
+              "range": "10-60",
+              "truth": {
+                "loinc": "2324-2",
+                "value": 42.0,
+                "value_text": null,
+                "unit": "U/L",
+                "ref_low": 10.0,
+                "ref_high": 60.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "总胆红素(TBIL)",
+              "value": "27.1",
+              "flag": "↑",
+              "unit": "μmol/L",
+              "range": "0.0-21.0",
+              "truth": {
+                "loinc": "1975-2",
+                "value": 27.1,
+                "value_text": null,
+                "unit": "umol/L",
+                "ref_low": 0.0,
+                "ref_high": 21.0,
+                "flag": "↑"
+              }
+            },
+            {
+              "name": "白蛋白(ALB)",
+              "value": "47.8",
+              "unit": "g/L",
+              "range": "40.0-55.0",
+              "truth": {
+                "loinc": "1751-7",
+                "value": 47.8,
+                "value_text": null,
+                "unit": "g/L",
+                "ref_low": 40.0,
+                "ref_high": 55.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "肌酐(CREA)",
+              "value": "84",
+              "unit": "μmol/L",
+              "range": "57-111",
+              "truth": {
+                "loinc": "2160-0",
+                "value": 84.0,
+                "value_text": null,
+                "unit": "umol/L",
+                "ref_low": 57.0,
+                "ref_high": 111.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "尿酸(UA)",
+              "value": "392",
+              "unit": "μmol/L",
+              "range": "208-428",
+              "truth": {
+                "loinc": "3084-1",
+                "value": 392.0,
+                "value_text": null,
+                "unit": "umol/L",
+                "ref_low": 208.0,
+                "ref_high": 428.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "尿素(UREA)",
+              "value": "9.70",
+              "flag": "↑",
+              "unit": "mmol/L",
+              "range": "3.10-8.00",
+              "truth": {
+                "loinc": "22664-7",
+                "value": 9.7,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 3.1,
+                "ref_high": 8.0,
+                "flag": "↑"
+              }
+            },
+            {
+              "name": "促甲状腺激素(TSH)",
+              "value": "5.59",
+              "flag": "↑",
+              "unit": "mIU/L",
+              "range": "0.27-4.20",
+              "truth": {
+                "loinc": "3016-3",
+                "value": 5.59,
+                "value_text": null,
+                "unit": "m[IU]/L",
+                "ref_low": 0.27,
+                "ref_high": 4.2,
+                "flag": "↑"
+              }
+            }
+          ]
+        },
+        {
+          "title": "尿常规",
+          "rows": [
+            {
+              "name": "尿蛋白(PRO)",
+              "value": "阴性",
+              "range": "阴性",
+              "truth": {
+                "loinc": "20454-5",
+                "value": null,
+                "value_text": "阴性",
+                "unit": null,
+                "ref_low": null,
+                "ref_high": null,
+                "flag": null
+              }
+            },
+            {
+              "name": "葡萄糖(GLU)",
+              "value": "阴性",
+              "range": "阴性",
+              "truth": {
+                "loinc": "25428-4",
+                "value": null,
+                "value_text": "阴性",
+                "unit": null,
+                "ref_low": null,
+                "ref_high": null,
+                "flag": null
+              }
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "注：本报告为合成测试数据，仅用于软件测试。"
+      ]
+    }
+  ],
+  "outputs": [
+    "pdf",
+    "scan",
+    "photo"
+  ],
+  "photo": {
+    "angle": -0.8329461377446291,
+    "blur": 0.9410199441907594,
+    "noise": 0.06330122507671126,
+    "perspective": null
+  },
+  "issued_at": "2020-02-17"
+}

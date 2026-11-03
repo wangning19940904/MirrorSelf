@@ -1,8 +1,9 @@
 //! Rule-based linking (architecture §5, stage 6) and the search index.
 //!
-//! v1 rules: devices and apps become `device` entities, workout types become
-//! `activity_type` entities, and events link to them. AI fuzzy matching of
-//! providers and people arrives with documents (M2).
+//! Rules: devices and apps become `device` entities, workout types become
+//! `activity_type` entities, the providers named on checkup reports become
+//! `provider` entities, and events link to them. AI fuzzy matching of
+//! provider and people names ("Dr. Wang" = "王医生") comes later.
 
 use anyhow::Result;
 use rusqlite::{params, Connection};
@@ -26,7 +27,8 @@ pub(super) fn run(conn: &Connection) -> Result<Value> {
     };
 
     let sources: Vec<String> = conn
-        .prepare("SELECT DISTINCT source_name FROM observations WHERE source_name IS NOT NULL ORDER BY source_name")?
+        .prepare("SELECT DISTINCT source_name FROM observations
+                  WHERE source_name IS NOT NULL AND code_system = 'ms' ORDER BY source_name")?
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     for name in &sources {
@@ -54,6 +56,11 @@ pub(super) fn run(conn: &Connection) -> Result<Value> {
                 let to = add_entity("device", source)?;
                 links += link.execute(params![event_id, to, "measured_by"])? as u64;
             }
+        } else if kind == "checkup" {
+            if let Some(provider) = data["provider"].as_str() {
+                let to = add_entity("provider", provider)?;
+                links += link.execute(params![event_id, to, "occurred_at"])? as u64;
+            }
         }
     }
     let entities: i64 = conn.query_row("SELECT count(*) FROM entities", [], |r| r.get(0))?;
@@ -70,8 +77,15 @@ pub(super) fn index_search(conn: &Connection) -> Result<Value> {
          INSERT INTO search_fts (kind, ref_id, local_date, title, body)
            SELECT 'entity', id, NULL, name, kind || ' ' || aliases FROM entities;
          INSERT INTO search_fts (kind, ref_id, local_date, title, body)
-           SELECT 'metric', code, NULL, display, code || ' ' || coalesce(display_zh, '') || ' ' || category_id
-           FROM codes;",
+           SELECT CASE code_system WHEN 'loinc' THEN 'analyte' ELSE 'metric' END, code, NULL, display,
+                  code || ' ' || coalesce(display_zh, '') || ' ' || category_id
+           FROM codes;
+         INSERT INTO search_fts (kind, ref_id, local_date, title, body)
+           SELECT 'document', d.id, d.issued_at, coalesce(d.title, 'Document'),
+                  coalesce(d.provider_name, '') || ' ' ||
+                  coalesce((SELECT group_concat(o.label, ' ') FROM observations o WHERE o.document_id = d.id), '') || ' ' ||
+                  coalesce(d.text, '')
+           FROM documents d;",
     )?;
     let rows: i64 = conn.query_row("SELECT count(*) FROM search_fts", [], |r| r.get(0))?;
     Ok(json!({ "documents": rows }))

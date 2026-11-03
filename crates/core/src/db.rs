@@ -6,9 +6,13 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use crate::codes;
+use crate::labs;
 use crate::crypto::SubKeys;
 
-const MIGRATIONS: &[&str] = &[include_str!("schema/0001_init.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("schema/0001_init.sql"),
+    include_str!("schema/0002_checkup_reports.sql"),
+];
 
 pub fn open(path: &Path, keys: &SubKeys) -> Result<Connection> {
     let conn = Connection::open(path).with_context(|| format!("opening {}", path.display()))?;
@@ -20,6 +24,7 @@ pub fn open(path: &Path, keys: &SubKeys) -> Result<Connection> {
     pragma(&conn, "PRAGMA synchronous = NORMAL")?;
     migrate(&conn)?;
     codes::seed(&conn)?;
+    labs::seed(&conn)?;
     Ok(conn)
 }
 

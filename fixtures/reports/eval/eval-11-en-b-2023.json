@@ -1,0 +1,320 @@
+{
+  "id": "eval-11-en-b-2023",
+  "language": "en",
+  "provider": "Harbor Lab Services (Sample)",
+  "title": "Laboratory Report",
+  "header": [
+    "Patient: Test Patient (synthetic)",
+    "Sex: M",
+    "DOB: 1983-01-01",
+    "Collected: 2023-09-03"
+  ],
+  "columns": [
+    {
+      "key": "name",
+      "label": "Test",
+      "x": 50.0
+    },
+    {
+      "key": "value",
+      "label": "Result",
+      "x": 210.0
+    },
+    {
+      "key": "unit",
+      "label": "Units",
+      "x": 280.0
+    },
+    {
+      "key": "range",
+      "label": "Reference Range",
+      "x": 380.0
+    },
+    {
+      "key": "flag",
+      "label": "Flag",
+      "x": 500.0
+    }
+  ],
+  "pages": [
+    {
+      "sections": [
+        {
+          "title": "Hematology and Lipids",
+          "rows": [
+            {
+              "name": "WBC",
+              "value": "8.0",
+              "unit": "10^3/uL",
+              "range": "3.8-10.8",
+              "truth": {
+                "loinc": "6690-2",
+                "value": 8.0,
+                "value_text": null,
+                "unit": "10*3/uL",
+                "ref_low": 3.8,
+                "ref_high": 10.8,
+                "flag": null
+              }
+            },
+            {
+              "name": "Hemoglobin",
+              "value": "15.3",
+              "unit": "g/dL",
+              "range": "13.2-17.1",
+              "truth": {
+                "loinc": "718-7",
+                "value": 15.3,
+                "value_text": null,
+                "unit": "g/dL",
+                "ref_low": 13.2,
+                "ref_high": 17.1,
+                "flag": null
+              }
+            },
+            {
+              "name": "Platelets",
+              "value": "227",
+              "unit": "10^3/uL",
+              "range": "140-400",
+              "truth": {
+                "loinc": "777-3",
+                "value": 227.0,
+                "value_text": null,
+                "unit": "10*3/uL",
+                "ref_low": 140.0,
+                "ref_high": 400.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "Total Cholesterol",
+              "value": "212",
+              "flag": "H",
+              "unit": "mg/dL",
+              "range": "<200",
+              "truth": {
+                "loinc": "2093-3",
+                "value": 212.0,
+                "value_text": null,
+                "unit": "mg/dL",
+                "ref_low": null,
+                "ref_high": 200.0,
+                "flag": "H"
+              }
+            },
+            {
+              "name": "LDL Cholesterol",
+              "value": "138",
+              "flag": "H",
+              "unit": "mg/dL",
+              "range": "<100",
+              "truth": {
+                "loinc": "13457-7",
+                "value": 138.0,
+                "value_text": null,
+                "unit": "mg/dL",
+                "ref_low": null,
+                "ref_high": 100.0,
+                "flag": "H"
+              }
+            },
+            {
+              "name": "HDL Cholesterol",
+              "value": "45",
+              "unit": "mg/dL",
+              "range": ">40",
+              "truth": {
+                "loinc": "2085-9",
+                "value": 45.0,
+                "value_text": null,
+                "unit": "mg/dL",
+                "ref_low": 40.0,
+                "ref_high": null,
+                "flag": null
+              }
+            },
+            {
+              "name": "Triglycerides",
+              "value": "139",
+              "unit": "mg/dL",
+              "range": "<150",
+              "truth": {
+                "loinc": "2571-8",
+                "value": 139.0,
+                "value_text": null,
+                "unit": "mg/dL",
+                "ref_low": null,
+                "ref_high": 150.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "Glucose",
+              "value": "53",
+              "flag": "L",
+              "unit": "mg/dL",
+              "range": "70-99",
+              "truth": {
+                "loinc": "1558-6",
+                "value": 53.0,
+                "value_text": null,
+                "unit": "mg/dL",
+                "ref_low": 70.0,
+                "ref_high": 99.0,
+                "flag": "L"
+              }
+            }
+          ]
+        }
+      ],
+      "notes": []
+    },
+    {
+      "sections": [
+        {
+          "title": "Chemistry",
+          "rows": [
+            {
+              "name": "Hemoglobin A1c",
+              "value": "5.2",
+              "unit": "%",
+              "range": "<5.7",
+              "truth": {
+                "loinc": "4548-4",
+                "value": 5.2,
+                "value_text": null,
+                "unit": "%",
+                "ref_low": null,
+                "ref_high": 5.7,
+                "flag": null
+              }
+            },
+            {
+              "name": "ALT",
+              "value": "6",
+              "flag": "L",
+              "unit": "U/L",
+              "range": "9-46",
+              "truth": {
+                "loinc": "1742-6",
+                "value": 6.0,
+                "value_text": null,
+                "unit": "U/L",
+                "ref_low": 9.0,
+                "ref_high": 46.0,
+                "flag": "L"
+              }
+            },
+            {
+              "name": "Creatinine",
+              "value": "0.48",
+              "flag": "L",
+              "unit": "mg/dL",
+              "range": "0.70-1.33",
+              "truth": {
+                "loinc": "2160-0",
+                "value": 0.48,
+                "value_text": null,
+                "unit": "mg/dL",
+                "ref_low": 0.7,
+                "ref_high": 1.33,
+                "flag": "L"
+              }
+            },
+            {
+              "name": "BUN",
+              "value": "11",
+              "unit": "mg/dL",
+              "range": "7-25",
+              "truth": {
+                "loinc": "3094-0",
+                "value": 11.0,
+                "value_text": null,
+                "unit": "mg/dL",
+                "ref_low": 7.0,
+                "ref_high": 25.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "Uric Acid",
+              "value": "7.1",
+              "unit": "mg/dL",
+              "range": "4.0-8.0",
+              "truth": {
+                "loinc": "3084-1",
+                "value": 7.1,
+                "value_text": null,
+                "unit": "mg/dL",
+                "ref_low": 4.0,
+                "ref_high": 8.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "TSH",
+              "value": "1.24",
+              "unit": "uIU/mL",
+              "range": "0.40-4.50",
+              "truth": {
+                "loinc": "3016-3",
+                "value": 1.24,
+                "value_text": null,
+                "unit": "u[IU]/mL",
+                "ref_low": 0.4,
+                "ref_high": 4.5,
+                "flag": null
+              }
+            },
+            {
+              "name": "hs-CRP",
+              "value": "0.7",
+              "unit": "mg/L",
+              "range": "<1.0",
+              "truth": {
+                "loinc": "30522-7",
+                "value": 0.7,
+                "value_text": null,
+                "unit": "mg/L",
+                "ref_low": null,
+                "ref_high": 1.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "Ferritin",
+              "value": "53",
+              "unit": "ng/mL",
+              "range": "38-380",
+              "truth": {
+                "loinc": "2276-4",
+                "value": 53.0,
+                "value_text": null,
+                "unit": "ng/mL",
+                "ref_low": 38.0,
+                "ref_high": 380.0,
+                "flag": null
+              }
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "Synthetic test data for software testing only."
+      ]
+    }
+  ],
+  "outputs": [
+    "pdf",
+    "scan",
+    "photo"
+  ],
+  "photo": {
+    "angle": 0.6802693191355708,
+    "blur": 0.948487676118077,
+    "noise": 0.05647898576776199,
+    "perspective": 0.022148099059649904
+  },
+  "issued_at": "2023-09-03"
+}

@@ -1,0 +1,181 @@
+{
+  "id": "zh-quirks-2023",
+  "language": "zh",
+  "provider": "云杉社区卫生院（示例）",
+  "title": "检验报告单",
+  "header": [
+    "姓名：测试用户",
+    "性别：男",
+    "年龄：40岁",
+    "样本号：S20230908",
+    "报告日期：2023-09-08"
+  ],
+  "columns": [
+    {
+      "key": "name",
+      "label": "项目",
+      "x": 50.0
+    },
+    {
+      "key": "value",
+      "label": "结果",
+      "x": 250.0
+    },
+    {
+      "key": "flag",
+      "label": "提示",
+      "x": 315.0
+    },
+    {
+      "key": "unit",
+      "label": "单位",
+      "x": 360.0
+    },
+    {
+      "key": "range",
+      "label": "参考范围",
+      "x": 460.0
+    }
+  ],
+  "pages": [
+    {
+      "sections": [
+        {
+          "title": "血常规",
+          "rows": [
+            {
+              "name": "白细胞计数(WBC)",
+              "value": "5.40",
+              "unit": "×10⁹/L",
+              "range": "3.5-9.5",
+              "truth": {
+                "loinc": "6690-2",
+                "value": 5.4,
+                "value_text": null,
+                "unit": "10*9/L",
+                "ref_low": 3.5,
+                "ref_high": 9.5,
+                "flag": null
+              }
+            },
+            {
+              "name": "血红蛋白(HGB)",
+              "value": "1480",
+              "flag": "↑",
+              "unit": "g/L",
+              "range": "130-175",
+              "truth": {
+                "loinc": "718-7",
+                "value": 1480.0,
+                "value_text": null,
+                "unit": "g/L",
+                "ref_low": 130.0,
+                "ref_high": 175.0,
+                "flag": "↑"
+              }
+            },
+            {
+              "name": "血小板计数(PLT)",
+              "value": "210",
+              "unit": "×10⁹/L",
+              "range": "125-350",
+              "truth": {
+                "loinc": "777-3",
+                "value": 210.0,
+                "value_text": null,
+                "unit": "10*9/L",
+                "ref_low": 125.0,
+                "ref_high": 350.0,
+                "flag": null
+              }
+            }
+          ]
+        },
+        {
+          "title": "血脂",
+          "rows": [
+            {
+              "name": "总胆固醇(TC)",
+              "value": "4.95",
+              "flag": "↑",
+              "unit": "mmol/L",
+              "range": "<5.20",
+              "truth": {
+                "loinc": "2093-3",
+                "value": 4.95,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": null,
+                "ref_high": 5.2,
+                "flag": "↑"
+              }
+            },
+            {
+              "name": "低密度脂蛋白胆固酵",
+              "value": "3.05",
+              "unit": "mmol/L",
+              "range": "0-3.40",
+              "truth": {
+                "loinc": "13457-7",
+                "value": 3.05,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 0.0,
+                "ref_high": 3.4,
+                "flag": null
+              }
+            }
+          ]
+        },
+        {
+          "title": "其他",
+          "rows": [
+            {
+              "name": "促甲状腺激素(TSH)",
+              "value": "2.35",
+              "unit": "mmol/L",
+              "range": "0.27-4.20",
+              "truth": {
+                "loinc": "3016-3",
+                "value": 2.35,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 0.27,
+                "ref_high": 4.2,
+                "flag": null
+              }
+            },
+            {
+              "name": "幽门螺杆菌抗体(Hp-IgG)",
+              "value": "12.5",
+              "unit": "U/mL",
+              "range": "<20.0",
+              "truth": {
+                "loinc": "",
+                "value": 12.5,
+                "value_text": null,
+                "unit": "U/mL",
+                "ref_low": null,
+                "ref_high": 20.0,
+                "flag": null
+              }
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "注：本报告为合成测试数据，仅用于软件测试。"
+      ]
+    }
+  ],
+  "outputs": [
+    "pdf",
+    "photo"
+  ],
+  "photo": {
+    "angle": 0.7,
+    "blur": 0.6,
+    "noise": 0.05
+  },
+  "issued_at": "2023-09-08"
+}

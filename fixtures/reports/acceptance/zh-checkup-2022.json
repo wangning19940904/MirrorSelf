@@ -1,0 +1,181 @@
+{
+  "id": "zh-checkup-2022",
+  "language": "zh",
+  "provider": "青松健康体检中心（示例）",
+  "title": "健康体检报告",
+  "header": [
+    "姓名：测试用户",
+    "性别：男",
+    "年龄：39岁",
+    "体检编号：T20220520",
+    "体检日期：2022/05/20"
+  ],
+  "columns": [
+    {
+      "key": "name",
+      "label": "检验项目",
+      "x": 50.0
+    },
+    {
+      "key": "abbr",
+      "label": "缩写",
+      "x": 200.0
+    },
+    {
+      "key": "value_flag",
+      "label": "结果",
+      "x": 262.0
+    },
+    {
+      "key": "unit",
+      "label": "单位",
+      "x": 340.0
+    },
+    {
+      "key": "range",
+      "label": "参考区间",
+      "x": 450.0
+    }
+  ],
+  "pages": [
+    {
+      "sections": [
+        {
+          "title": "血脂",
+          "rows": [
+            {
+              "name": "总胆固醇",
+              "abbr": "TC",
+              "value": "4.95",
+              "unit": "mmol/L",
+              "range": "3.10-5.20",
+              "truth": {
+                "loinc": "2093-3",
+                "value": 4.95,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 3.1,
+                "ref_high": 5.2,
+                "flag": null
+              }
+            },
+            {
+              "name": "甘油三酯",
+              "abbr": "TG",
+              "value": "1.12",
+              "unit": "mmol/L",
+              "range": "0.40-1.70",
+              "truth": {
+                "loinc": "2571-8",
+                "value": 1.12,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 0.4,
+                "ref_high": 1.7,
+                "flag": null
+              }
+            },
+            {
+              "name": "高密度脂蛋白胆固醇",
+              "abbr": "HDL-C",
+              "value": "1.30",
+              "unit": "mmol/L",
+              "range": "1.04-1.55",
+              "truth": {
+                "loinc": "2085-9",
+                "value": 1.3,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 1.04,
+                "ref_high": 1.55,
+                "flag": null
+              }
+            },
+            {
+              "name": "低密度脂蛋白胆固醇",
+              "abbr": "LDL-C",
+              "value": "3.12",
+              "unit": "mmol/L",
+              "range": "0-3.37",
+              "truth": {
+                "loinc": "13457-7",
+                "value": 3.12,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 0.0,
+                "ref_high": 3.37,
+                "flag": null
+              }
+            }
+          ]
+        },
+        {
+          "title": "生化检查",
+          "rows": [
+            {
+              "name": "空腹血糖",
+              "abbr": "GLU",
+              "value": "5.31",
+              "unit": "mmol/L",
+              "range": "3.90-6.10",
+              "truth": {
+                "loinc": "1558-6",
+                "value": 5.31,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 3.9,
+                "ref_high": 6.1,
+                "flag": null
+              }
+            },
+            {
+              "name": "丙氨酸氨基转移酶",
+              "abbr": "ALT",
+              "value": "58↑",
+              "unit": "U/L",
+              "range": "0-40",
+              "truth": {
+                "loinc": "1742-6",
+                "value": 58.0,
+                "value_text": null,
+                "unit": "U/L",
+                "ref_low": 0.0,
+                "ref_high": 40.0,
+                "flag": "↑"
+              }
+            },
+            {
+              "name": "尿酸",
+              "abbr": "UA",
+              "value": "401",
+              "unit": "μmol/L",
+              "range": "208-428",
+              "truth": {
+                "loinc": "3084-1",
+                "value": 401.0,
+                "value_text": null,
+                "unit": "umol/L",
+                "ref_low": 208.0,
+                "ref_high": 428.0,
+                "flag": null
+              }
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "注：本报告为合成测试数据，仅用于软件测试。"
+      ]
+    }
+  ],
+  "outputs": [
+    "pdf",
+    "photo"
+  ],
+  "photo": {
+    "angle": -1.1,
+    "blur": 0.7,
+    "noise": 0.06
+  },
+  "issued_at": "2022-05-20"
+}

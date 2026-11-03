@@ -2,3 +2,4 @@
 //! pipeline decides what to keep and how to normalize it.
 
 pub mod apple_health;
+pub mod report;
