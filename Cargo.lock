@@ -796,6 +796,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "encoding_rs",
+ "flate2",
  "getrandom 0.2.17",
  "hex",
  "hkdf",

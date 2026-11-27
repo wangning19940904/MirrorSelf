@@ -15,6 +15,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("schema/0002_items.sql"),
     include_str!("schema/0003_finance.sql"),
     include_str!("schema/0004_sync.sql"),
+    include_str!("schema/0005_enrich.sql"),
 ];
 
 pub fn open(path: &Path, keys: &SubKeys) -> Result<Connection> {

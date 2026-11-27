@@ -1,0 +1,16 @@
+{
+  "id": "chatcmpl-synthetic-7",
+  "object": "chat.completion",
+  "created": 1790000000,
+  "model": "synthetic-vl",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"text\": null, \"type\": \"invoice_doc\", \"subtype\": null, \"title\": null, \"event_time\": null, \"place\": null, \"confidence\": 1.7}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}
