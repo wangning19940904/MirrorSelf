@@ -3,3 +3,4 @@
 
 pub mod alipay;
 pub mod apple_health;
+pub mod feishu_calendar;
