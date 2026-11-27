@@ -107,9 +107,14 @@ never the name, and never the file contents.
 ## Limits
 
 - One file per request, up to `server.upload_max_bytes` (256 MiB by
-  default). The page refuses larger files before sending them; the server
-  answers 413 when `Content-Length` is over the limit and stops reading a
-  body without one once it passes the limit. The file is held in memory while
+  default). The page refuses larger files before sending them. The server
+  answers 413 at once when `Content-Length` is over the limit (a client that
+  keeps sending may then see the connection reset instead of the 413, so
+  check the limit first: `max_bytes` from `/v1/pair` or `/v1/session`). A
+  body without a declared length stops being buffered at the limit, and the
+  rest is read and discarded, up to another limit's worth, so the 413
+  arrives. Other refusals (401, 403, 400) also read and discard the body
+  first, so a phone sees "pair again" rather than a network error. The file is held in memory while
   it is imported, so peak memory use is a few times the file size.
 - Uploads are processed before the response returns. A multi-year Health
   export can take a few minutes; keep the page open until it reports the

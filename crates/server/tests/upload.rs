@@ -82,6 +82,27 @@ async fn send(addr: SocketAddr, head: String, body: &[u8]) -> Reply {
     }
 }
 
+/// Sends a whole request, waits, then reads. If the server answers and
+/// closes while request bytes are still unread in its socket, the OS resets
+/// the connection and the client loses the answer; the wait makes that
+/// deterministic instead of a race.
+async fn send_and_wait(addr: SocketAddr, head: String, body: &[u8]) -> Reply {
+    let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+    stream.write_all(head.as_bytes()).await.unwrap();
+    stream.write_all(body).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let mut raw = Vec::new();
+    stream.read_to_end(&mut raw).await.expect("the refusal is readable, not a reset");
+    let text = String::from_utf8_lossy(&raw).into_owned();
+    let (head, body) = text.split_once("\r\n\r\n").unwrap_or((&text, ""));
+    Reply {
+        status: head.split_whitespace().nth(1).unwrap().parse().unwrap(),
+        head: head.to_ascii_lowercase(),
+        body: serde_json::from_str(body).unwrap_or(Value::Null),
+        text: body.to_string(),
+    }
+}
+
 async fn upload(addr: SocketAddr, credential: Option<&str>, name: &str, content: &[u8]) -> Reply {
     let auth = credential.map(|t| format!("Authorization: Bearer {t}\r\n")).unwrap_or_default();
     let head = format!(
@@ -377,4 +398,60 @@ async fn upload_sessions_cannot_read_and_the_lan_router_only_uploads() {
     assert_eq!(r.status, 303);
     assert!(r.head.contains("location: /upload"));
     assert_eq!(get(s.api, "/upload", None).await.status, 200);
+}
+
+#[tokio::test]
+async fn refusals_are_readable_when_the_request_body_is_not_used() {
+    // Larger than what the server reads in one go, so most of it is still
+    // in the socket when the handler decides to refuse.
+    let s = start(UploadSettings::default()).await;
+    let file = vec![b'a'; 256 * 1024];
+    let upload_head = |auth: &str, len: usize| {
+        format!(
+            "POST /v1/upload HTTP/1.1\r\nHost: localhost\r\n{auth}X-File-Name: a.txt\r\n\
+             Content-Length: {len}\r\nConnection: close\r\n\r\n"
+        )
+    };
+
+    // An expired or unknown session: the page must see 401 to ask for a new code.
+    let r = send_and_wait(s.lan, upload_head("Authorization: Bearer stale\r\n", file.len()), &file).await;
+    assert_eq!((r.status, r.body["code"].as_str()), (401, Some("pair_required")), "{}", r.text);
+    let r = send_and_wait(s.lan, upload_head("", file.len()), &file).await;
+    assert_eq!(r.status, 401);
+    let token = format!("Authorization: Bearer {}\r\n", s.token);
+    let r = send_and_wait(s.lan, upload_head(&token, file.len()), &file).await;
+    assert_eq!((r.status, r.body["code"].as_str()), (403, Some("token_not_allowed")));
+
+    // Too long without a declared length: buffering stops at the limit, and
+    // up to one more limit's worth is read and discarded so the 413 arrives.
+    let small = start(UploadSettings { max_bytes: 128 * 1024, ..UploadSettings::default() }).await;
+    let session = paired_session(&small).await;
+    let over = &file[..200 * 1024];
+    let mut chunked = format!("{:x}\r\n", over.len()).into_bytes();
+    chunked.extend_from_slice(over);
+    chunked.extend_from_slice(b"\r\n0\r\n\r\n");
+    let head = format!(
+        "POST /v1/upload HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {session}\r\n\
+         Transfer-Encoding: chunked\r\nConnection: close\r\n\r\n"
+    );
+    let r = send_and_wait(small.lan, head, &chunked).await;
+    assert_eq!((r.status, r.body["code"].as_str()), (413, Some("too_large")));
+
+    // The read API refuses an upload session the same way.
+    let sql = format!(r#"{{"sql":"SELECT 1{}"}}"#, " ".repeat(200 * 1024));
+    let head = format!(
+        "POST /v1/query/sql HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer {session}\r\n\
+         Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        sql.len()
+    );
+    assert_eq!(send_and_wait(small.api, head, sql.as_bytes()).await.status, 403);
+
+    // A pairing body over its limit.
+    let big = vec![b' '; 48 * 1024];
+    let head = format!(
+        "POST /v1/pair HTTP/1.1\r\nHost: localhost\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        big.len()
+    );
+    assert_eq!(send_and_wait(s.lan, head, &big).await.status, 400);
+    assert_eq!(s.app().raw_list().unwrap()["count"], 0);
 }

@@ -25,6 +25,8 @@ use crate::upload::{self, SessionCheck, UploadSettings, UploadState, Uploads};
 
 pub(crate) const ACTOR: &str = "rest";
 pub(crate) const CLIENT: &str = "bearer-token";
+/// Body bytes read and discarded before refusing an unauthenticated request.
+const REFUSED_BODY_DRAIN: u64 = 1024 * 1024;
 
 #[derive(Clone)]
 struct AppState {
@@ -208,9 +210,8 @@ fn display_addr(addr: SocketAddr) -> String {
 }
 
 async fn require_token(State(state): State<AppState>, req: Request, next: Next) -> Response {
-    let presented = upload::bearer(req.headers());
-    match presented {
-        Some(t) if constant_time_eq(t.as_bytes(), state.token.as_bytes()) => next.run(req).await,
+    let refusal = match upload::bearer(req.headers()) {
+        Some(t) if constant_time_eq(t.as_bytes(), state.token.as_bytes()) => return next.run(req).await,
         Some(t) if matches!(state.uploads.check_session(t), SessionCheck::Valid(_)) => (
             StatusCode::FORBIDDEN,
             Json(json!({ "error": "this credential can only upload files" })),
@@ -222,7 +223,10 @@ async fn require_token(State(state): State<AppState>, req: Request, next: Next) 
             Json(json!({ "error": "missing or invalid bearer token" })),
         )
             .into_response(),
-    }
+    };
+    // Let the client read the refusal instead of a connection reset.
+    upload::drain(req.into_body(), REFUSED_BODY_DRAIN).await;
+    refusal
 }
 
 pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {

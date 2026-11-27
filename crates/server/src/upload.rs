@@ -18,7 +18,8 @@ use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use http_body_util::{BodyExt, LengthLimitError, Limited};
+use axum::body::Body;
+use http_body_util::BodyExt;
 use mirrorself_core::config::ServerConfig;
 use mirrorself_core::crypto::{random_bytes, sha256_hex};
 use mirrorself_core::time::now_utc_string;
@@ -40,6 +41,12 @@ pub const SESSION_ACTOR: &str = "upload-page";
 
 const PAIR_DIGITS: usize = 8;
 const MAX_NAME_CHARS: usize = 255;
+/// Largest pairing request body read.
+const MAX_PAIR_BODY: u64 = 1024;
+/// How much of a small request body is read and discarded when it is refused.
+const SMALL_DRAIN: u64 = 64 * 1024;
+/// How long a refused body is drained before the connection is closed anyway.
+const DRAIN_TIME: Duration = Duration::from_secs(15);
 
 /// Limits for pairing and uploads. [`UploadSettings::from_config`] reads
 /// `[server]`; the rest are fixed defaults that tests may shorten.
@@ -413,8 +420,8 @@ struct PairBody {
 async fn pair(State(s): State<UploadState>, req: Request) -> Response {
     let peer = peer(&req);
     let client = with_peer("unpaired".into(), peer);
-    let body = match Limited::new(req.into_body(), 1024).collect().await {
-        Ok(b) => b.to_bytes(),
+    let body = match read_body(req.into_body(), MAX_PAIR_BODY, SMALL_DRAIN).await {
+        Ok(b) => b,
         Err(_) => return fail(StatusCode::BAD_REQUEST, "bad_request", "send {\"code\": \"12345678\"}"),
     };
     let Ok(body) = serde_json::from_slice::<PairBody>(&body) else {
@@ -476,12 +483,15 @@ async fn session(State(s): State<UploadState>, req: Request) -> Response {
 }
 
 async fn unpair(State(s): State<UploadState>, req: Request) -> Response {
-    let Some(presented) = bearer(req.headers()) else {
+    let peer = peer(&req);
+    let (parts, body) = req.into_parts();
+    drain(body, SMALL_DRAIN).await;
+    let Some(presented) = bearer(&parts.headers) else {
         return fail(StatusCode::UNAUTHORIZED, "pair_required", "no session to end");
     };
     if let SessionCheck::Valid(label) = s.uploads.check_session(presented) {
         s.uploads.end_session(presented);
-        let client = with_peer(format!("session-{label}"), peer(&req));
+        let client = with_peer(format!("session-{label}"), peer);
         s.audit(SESSION_ACTOR, client, "unpair", json!({}), 0, "ok").await;
     }
     Json(json!({ "ended": true })).into_response()
@@ -493,47 +503,63 @@ struct UploadParams {
 }
 
 async fn upload(State(s): State<UploadState>, Query(q): Query<UploadParams>, req: Request) -> Response {
-    let credential = match s.authenticate(req.headers()) {
-        Ok(c) => c,
-        Err(resp) => return *resp,
-    };
-    let (actor, client) = credential.audit_identity(peer(&req));
+    let peer = peer(&req);
+    let (parts, body) = req.into_parts();
     let max = s.uploads.settings().max_bytes;
+    let declared = parts
+        .headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
 
-    let name = match file_name(req.headers(), q.name) {
+    let credential = match s.authenticate(&parts.headers) {
+        Ok(c) => c,
+        Err(resp) => {
+            // Read what a legitimate upload could have sent, so the client
+            // gets this answer rather than a reset (see `drain`).
+            if declared.is_none_or(|n| n <= max) {
+                drain(body, max).await;
+            }
+            return *resp;
+        }
+    };
+    let (actor, client) = credential.audit_identity(peer);
+
+    let name = match file_name(&parts.headers, q.name) {
         Ok(n) => n,
         Err(msg) => {
             s.audit(actor, client, "upload", json!({}), 0, "error").await;
+            if declared.is_none_or(|n| n <= max) {
+                drain(body, max).await;
+            }
             return fail(StatusCode::BAD_REQUEST, "bad_name", msg);
         }
     };
     let request = json!({ "name": name });
     let too_large = || {
-        fail(
+        let mut resp = fail(
             StatusCode::PAYLOAD_TOO_LARGE,
             "too_large",
             format!("the file is larger than the upload limit of {} (server.upload_max_bytes)", human_bytes(max)),
-        )
+        );
+        resp.headers_mut().insert(header::CONNECTION, HeaderValue::from_static("close"));
+        resp
     };
-    let declared = req
-        .headers()
-        .get(header::CONTENT_LENGTH)
-        .and_then(|v| v.to_str().ok())
-        .and_then(|v| v.parse::<u64>().ok());
     if declared.is_some_and(|n| n > max) {
+        // Not worth reading: the client said it will send more than the
+        // limit. The page checks the limit before sending, so browsers do
+        // not get here; other clients may see the connection reset.
         s.audit(actor, client, "upload", request, declared.unwrap_or(0) as i64, "error").await;
         return too_large();
     }
 
-    // Reads at most `max` bytes, whatever Content-Length claimed.
-    let limit = usize::try_from(max).unwrap_or(usize::MAX);
-    let content = match Limited::new(req.into_body(), limit).collect().await {
-        Ok(c) => c.to_bytes(),
-        Err(e) if e.downcast_ref::<LengthLimitError>().is_some() => {
+    let content = match read_body(body, max, max).await {
+        Ok(c) => c,
+        Err(BodyError::TooLarge) => {
             s.audit(actor, client, "upload", request, 0, "error").await;
             return too_large();
         }
-        Err(_) => {
+        Err(BodyError::Interrupted) => {
             s.audit(actor, client, "upload", request, 0, "error").await;
             return fail(StatusCode::BAD_REQUEST, "interrupted", "the upload was interrupted; try again");
         }
@@ -565,6 +591,52 @@ async fn upload(State(s): State<UploadState>, Query(q): Query<UploadParams>, req
         Ok(Err(e)) => fail(StatusCode::INTERNAL_SERVER_ERROR, "import_failed", format!("could not store the file: {e:#}")),
         Err(_) => fail(StatusCode::INTERNAL_SERVER_ERROR, "import_failed", "the import worker failed"),
     }
+}
+
+enum BodyError {
+    TooLarge,
+    Interrupted,
+}
+
+/// Reads a request body of at most `max` bytes, never buffering more. A body
+/// that turns out longer is drained (up to `drain_cap` more bytes) so that
+/// the client can read the 413.
+async fn read_body(mut body: Body, max: u64, drain_cap: u64) -> Result<Vec<u8>, BodyError> {
+    let mut buf = Vec::new();
+    while let Some(frame) = body.frame().await {
+        let frame = frame.map_err(|_| BodyError::Interrupted)?;
+        if let Ok(data) = frame.into_data() {
+            if (buf.len() + data.len()) as u64 > max {
+                drain(body, drain_cap).await;
+                return Err(BodyError::TooLarge);
+            }
+            buf.extend_from_slice(&data);
+        }
+    }
+    Ok(buf)
+}
+
+/// Reads and discards up to `cap` bytes of a request body that will not be
+/// used, for at most [`DRAIN_TIME`].
+///
+/// Hyper closes the connection after a response if the request body was not
+/// read to the end, and closing a TCP socket with received bytes still
+/// unread makes the OS send a reset. The client then loses the response: a
+/// browser reports a network error instead of, say, "session expired". So
+/// every early refusal reads the rest of a reasonably sized body first.
+pub(crate) async fn drain(mut body: Body, cap: u64) {
+    let _ = tokio::time::timeout(DRAIN_TIME, async {
+        let mut seen = 0u64;
+        while let Some(Ok(frame)) = body.frame().await {
+            if let Some(data) = frame.data_ref() {
+                seen += data.len() as u64;
+                if seen > cap {
+                    return;
+                }
+            }
+        }
+    })
+    .await;
 }
 
 /// Stores the file, then processes. A processing failure is reported next to

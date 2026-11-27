@@ -12,8 +12,8 @@ anyhow.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 axum.workspace = true
-tokio.workspace = true
-# Already in the dependency graph through axum; bounds the upload body.
+tokio = { workspace = true, features = ["time"] }
+# Already in the dependency graph through axum; reads request bodies frame by frame.
 http-body-util = "0.1"
 
 [dev-dependencies]
