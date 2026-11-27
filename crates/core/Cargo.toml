@@ -21,6 +21,7 @@ hkdf.workspace = true
 getrandom.workspace = true
 hex.workspace = true
 toml.workspace = true
+encoding_rs = "=0.8.35"
 
 [dev-dependencies]
 tempfile.workspace = true
