@@ -1,7 +1,9 @@
 # Multi-source demo plan
 
-Status: agreed on 2026-11-27. Supersedes the M2–M6 ordering in the README for
-the next iteration; the README roadmap items stay valid as later work.
+Status: agreed on 2026-11-27; all five workstreams and the integration pass
+are merged. Supersedes the M2–M6 ordering in the README for this iteration;
+the README roadmap items stay valid as later work. `crates/server/tests/demo.rs`
+runs the two demo questions end to end on synthetic data.
 
 ## Goal
 
@@ -260,12 +262,27 @@ cannot read.
 
 ## Integration (after the workstreams)
 
-1. Merge the five branches; resolve manifest and lockfile conflicts.
-2. Add typed read tools and REST routes for transactions, meetings and items,
-   through `mirrorself_server::tools::call` so they are audited.
-3. Extend `get_overview` and the `mirrorself://schema` resource.
-4. Write the two demo questions as an end-to-end test over synthetic data.
-5. Update the README.
+Done:
+
+1. The five branches are merged, with migrations in file-number order.
+2. `query_transactions` and `query_items` are typed, audited tools with REST
+   routes. Meetings, commits and pull requests are timeline events, and
+   `0006_timeline.sql` puts transactions and dated items on the timeline too.
+3. `get_overview` reports transactions and items; the `mirrorself://schema`
+   resource lists every `v_*` view.
+4. Only measured health metrics take part in cross-device de-duplication and
+   become `device` entities; bills and calendars do not.
+5. Search cites the right table for every kind and matches Chinese, Japanese
+   and Korean text by substring.
+6. One Feishu sync recipe, in the scheduler's syntax, is in `docs/sync.md`
+   and `docs/sources/feishu.md`.
+7. `crates/server/tests/demo.rs` answers both demo questions.
+
+Known gaps, none of them verified against real accounts or files: a real
+Alipay export, a real GitHub token, a real model endpoint, multi-page
+`lark-cli` output, and attendees in scheduled calendar sync (needs a wrapper
+script). Deleting the index also deletes sync cursors and run history, so the
+next sync re-reads its look-back window.
 
 Next after the demo: map and cross-source timeline views, Huawei Health
 import once a real export is available, lab extraction (M2), remote MCP (M4).

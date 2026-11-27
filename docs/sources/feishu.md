@@ -188,42 +188,51 @@ its events (UTC+8 if none), which is normally your own.
 
 ## Scheduled sync recipe
 
-For the scheduler in `docs/sync.md` (workstream W3). The template variables
-are the sync window in Unix seconds; rename them to whatever the scheduler
-uses.
+Add this to `mirrorself.toml`; `docs/sync.md` explains every field. The
+window placeholders are Unix seconds, which is what `instance_view` takes.
 
 ```toml
 [[sync]]
 name = "feishu-calendar"
 adapter = "cli"
-command = "lark-cli"
+source = "feishu"
+kind = "feishu_calendar_events"
+interval = "6h"
+# Each run re-reads the last 14 days, catching late RSVP changes,
+# cancellations and moves. The first run reads 30 days.
+overlap = "14d"
+lookback = "30d"
+timeout = "120s"
+[sync.cli]
+program = "lark-cli"
 args = [
   "calendar", "events", "instance_view",
   "--as", "user", "--calendar-id", "primary",
-  "--start-time", "{window_start_unix}",
-  "--end-time", "{window_end_unix}",
+  "--start-time", "{{since_unix}}",
+  "--end-time", "{{until_unix}}",
   "--format", "json",
 ]
-kind = "feishu_calendar_events"
-source = "feishu"
-interval = "6h"
-# Window: from 14 days back (re-reads recent days, catching late RSVP
-# changes, cancellations and moves) to 7 days ahead. Must stay under 40 days.
-lookback = "14d"
-lookahead = "7d"
 ```
 
 - Interval: 6 hours is plenty for daily metrics; meetings rarely change
   after they happen. Each run's stdout is one raw object; identical output
   is stored once.
-- Overlap: a 14-day look-back keeps the last two weeks current. Overlapping
+- Overlap: the 14-day overlap keeps the last two weeks current. Overlapping
   windows are safe (see [Overlapping fetches](#overlapping-fetches)).
-- A non-zero exit or an `"ok": false` response should be reported as a failed
-  run and not stored; if it is stored anyway, processing reports an error
-  for that object and stores nothing from it.
-- For attendees, run the shell loop from [Attendees](#attendees-optional) as
-  the command instead (`command = "sh"`, `args = ["-c", "…"]`) with the
-  window substituted; it makes one extra call per instance.
+- The window ends at the time of the run, so upcoming meetings are not
+  fetched; they arrive once they have started.
+- One call covers at most 40 days. If the hub has not synced for more than
+  about 26 days, the next window (the gap plus the overlap) exceeds that and
+  the run fails; import that stretch by hand with `mirrorself import
+  feishu-calendar`, or lower `overlap` for one run.
+- A non-zero exit fails the run and nothing is stored. An `"ok": false`
+  response that exits zero is stored, and processing then reports an error
+  for that object and writes nothing from it.
+- Attendees: the scheduler runs one program without a shell, so the loop
+  from [Attendees](#attendees-optional) cannot go in `args`. Save it as an
+  executable script that takes the two timestamps and set `program` to that
+  script. Without it, meetings sync with rooms and your own RSVP but no
+  people.
 
 ## Example
 

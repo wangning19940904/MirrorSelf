@@ -39,7 +39,7 @@ fn mcp_lifecycle_tools_resources_and_audit() {
 
     let tools = rpc(&app, &mut s, 2, "tools/list", json!({}));
     let tools = tools["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 9);
+    assert_eq!(tools.len(), 11);
     assert!(tools.iter().all(|t| t["inputSchema"]["type"] == "object"));
     assert!(tools.iter().all(|t| t["annotations"]["readOnlyHint"] == true));
 

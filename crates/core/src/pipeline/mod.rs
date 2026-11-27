@@ -39,7 +39,7 @@ pub struct Processor {
 }
 
 static DEDUPE: GlobalStage = GlobalStage {
-    processor: Processor { name: "normalize.dedupe", version: "1.0.0" },
+    processor: Processor { name: "normalize.dedupe", version: "1.1.0" },
     run: run_dedupe,
 };
 static DAILY_METRICS: GlobalStage = GlobalStage {
@@ -51,7 +51,7 @@ static SLEEP_SESSIONS: GlobalStage = GlobalStage {
     run: run_sleep_sessions,
 };
 static LINK_RULES: GlobalStage = GlobalStage {
-    processor: Processor { name: "link.rules", version: "1.0.0" },
+    processor: Processor { name: "link.rules", version: "1.1.0" },
     run: run_link_rules,
 };
 static INDEX_SEARCH: GlobalStage = GlobalStage {

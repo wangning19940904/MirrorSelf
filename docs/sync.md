@@ -239,13 +239,12 @@ of each window is kept. Keep the interval short enough that a window holds
 fewer than 100 commits. GitHub's search index can lag by a few minutes; the
 overlap covers that.
 
-## Adding W2's Feishu calendar recipe
+## The Feishu calendar recipe
 
 The Feishu calendar comes from `lark-cli` on a schedule, stored as kind
-`feishu_calendar_events` and parsed by W2's processor (`pipeline/feishu_calendar.rs`).
-W2 documents the exact command in `docs/sources/feishu.md`; take the program
-and arguments from there and put the window placeholders where the date
-range goes. The shape of the recipe:
+`feishu_calendar_events` and parsed by `pipeline/feishu_calendar.rs`.
+`docs/sources/feishu.md` covers the prerequisites, what is imported and the
+limits of this recipe.
 
 ```toml
 [[sync]]
@@ -253,16 +252,21 @@ name = "feishu-calendar"
 adapter = "cli"
 source = "feishu"
 kind = "feishu_calendar_events"
-interval = "30m"
-overlap = "1d"
+interval = "6h"
+# Each run re-reads the last 14 days, catching late RSVP changes,
+# cancellations and moves. The first run reads 30 days.
+overlap = "14d"
 lookback = "30d"
-cursor_format = "%Y-%m-%dT%H:%M:%S%:z"
-utc_offset = "+08:00"
 timeout = "120s"
 [sync.cli]
 program = "lark-cli"
-# The exact subcommand and flags are in docs/sources/feishu.md.
-args = ["calendar", "…", "--start", "{{since}}", "--end", "{{until}}"]
+args = [
+  "calendar", "events", "instance_view",
+  "--as", "user", "--calendar-id", "primary",
+  "--start-time", "{{since_unix}}",
+  "--end-time", "{{until_unix}}",
+  "--format", "json",
+]
 ```
 
 `lark-cli` keeps its own login under the user's home directory, so no

@@ -82,6 +82,8 @@ impl Hub {
             .route("/v1/entities", get(entities))
             .route("/v1/entities/{id}/links", get(entity_links))
             .route("/v1/search", get(search))
+            .route("/v1/transactions", get(transactions))
+            .route("/v1/items", get(items))
             .route("/v1/query/sql", post(sql))
             .route("/v1/audit", get(audit))
             .route("/v1/raw/{id}", get(raw))
@@ -319,6 +321,29 @@ struct SearchParams {
 }
 
 #[derive(Deserialize)]
+struct TransactionParams {
+    from: Option<String>,
+    to: Option<String>,
+    direction: Option<String>,
+    counterparty: Option<String>,
+    counted_only: Option<bool>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+#[derive(Deserialize)]
+struct ItemParams {
+    from: Option<String>,
+    to: Option<String>,
+    types: Option<String>,
+    status: Option<String>,
+    located_only: Option<bool>,
+    include_text: Option<bool>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+#[derive(Deserialize)]
 struct EntityParams {
     q: Option<String>,
 }
@@ -373,6 +398,22 @@ async fn document(State(s): State<AppState>, Path(id): Path<String>, Query(p): Q
 async fn search(State(s): State<AppState>, Query(p): Query<SearchParams>) -> Response {
     let args = json!({ "query": p.q, "from": p.from, "to": p.to, "kinds": split(p.kinds), "limit": p.limit });
     tool(&s, "search_records", args).await
+}
+
+async fn transactions(State(s): State<AppState>, Query(p): Query<TransactionParams>) -> Response {
+    let args = json!({
+        "from": p.from, "to": p.to, "direction": p.direction, "counterparty": p.counterparty,
+        "counted_only": p.counted_only, "limit": p.limit, "offset": p.offset,
+    });
+    tool(&s, "query_transactions", args).await
+}
+
+async fn items(State(s): State<AppState>, Query(p): Query<ItemParams>) -> Response {
+    let args = json!({
+        "from": p.from, "to": p.to, "types": split(p.types), "status": p.status,
+        "located_only": p.located_only, "include_text": p.include_text, "limit": p.limit, "offset": p.offset,
+    });
+    tool(&s, "query_items", args).await
 }
 
 async fn entity_links(State(s): State<AppState>, Path(id): Path<String>) -> Response {

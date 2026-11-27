@@ -258,19 +258,27 @@ fn snapshot(app: &App, with_raw_ids: bool) -> Value {
             t.as_object_mut().unwrap().remove("raw_id");
         }
     }
-    json!([
-        transactions,
-        q.run_sql("SELECT * FROM v_metrics_daily WHERE code = 'ms:spend' ORDER BY date, stat").unwrap(),
-        q.run_sql("SELECT * FROM v_entities WHERE kind = 'merchant' ORDER BY id").unwrap(),
-        q.run_sql("SELECT * FROM v_links WHERE from_type = 'transaction' ORDER BY from_id, to_id").unwrap(),
-        q.search(&SearchQuery {
+    let mut found = q
+        .search(&SearchQuery {
             query: "青禾简餐".into(),
             from: Some("2026-09-01".into()),
             to: Some("2026-11-30".into()),
             limit: Some(100),
             ..Default::default()
         })
-        .unwrap(),
+        .unwrap();
+    if !with_raw_ids {
+        // Raw ids are keyed by each home's vault key, so they differ between homes.
+        for hit in found["results"].as_array_mut().unwrap() {
+            hit["citations"][0].as_object_mut().unwrap().remove("raw_id");
+        }
+    }
+    json!([
+        transactions,
+        q.run_sql("SELECT * FROM v_metrics_daily WHERE code = 'ms:spend' ORDER BY date, stat").unwrap(),
+        q.run_sql("SELECT * FROM v_entities WHERE kind = 'merchant' ORDER BY id").unwrap(),
+        q.run_sql("SELECT * FROM v_links WHERE from_type = 'transaction' ORDER BY from_id, to_id").unwrap(),
+        found,
     ])
 }
 

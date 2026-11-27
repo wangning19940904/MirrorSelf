@@ -133,6 +133,16 @@ pub fn sleep_code(value: &str) -> Option<&'static str> {
     })
 }
 
+/// Whether a metric is measured by devices and apps (health data), as
+/// opposed to derived from records such as bills or calendars. Only measured
+/// metrics take part in cross-device de-duplication and device entities.
+pub fn is_measured(def: &MetricDef) -> bool {
+    !RECORD_CATEGORIES.contains(&def.category)
+}
+
+/// Categories whose metrics are derived from records, not measured.
+pub const RECORD_CATEGORIES: &[&str] = &["finance", "work"];
+
 pub fn is_sleep(code: &str) -> bool {
     code.starts_with("ms:sleep_")
 }
