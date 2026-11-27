@@ -109,22 +109,49 @@ fn default_notable_z() -> f64 {
     2.0
 }
 
+/// Suggested `server.lan_addr` for the phone upload page: all interfaces,
+/// the next port in MirrorSelf's block. Never used unless configured.
+pub const SUGGESTED_LAN_ADDR: &str = "0.0.0.0:12501";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
+    /// The REST API, loopback only (`127.0.0.1:12500`).
     #[serde(default = "default_addr")]
     pub addr: String,
+    /// Opt-in address on the local network for the phone upload page
+    /// (`/upload`, pairing and `POST /v1/upload` only; the read API stays on
+    /// `addr`). Absent by default, which keeps the hub loopback-only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lan_addr: Option<String>,
+    /// Largest file `POST /v1/upload` accepts, in bytes.
+    #[serde(default = "default_upload_max_bytes")]
+    pub upload_max_bytes: u64,
+    /// How long a paired upload session lasts, in minutes.
+    #[serde(default = "default_upload_session_minutes")]
+    pub upload_session_minutes: u64,
 }
 
 impl Default for ServerConfig {
     fn default() -> Self {
         Self {
             addr: default_addr(),
+            lan_addr: None,
+            upload_max_bytes: default_upload_max_bytes(),
+            upload_session_minutes: default_upload_session_minutes(),
         }
     }
 }
 
 fn default_addr() -> String {
     DEFAULT_ADDR.to_string()
+}
+
+fn default_upload_max_bytes() -> u64 {
+    256 * 1024 * 1024
+}
+
+fn default_upload_session_minutes() -> u64 {
+    12 * 60
 }
 
 impl Config {
