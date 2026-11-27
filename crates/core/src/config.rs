@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
+use crate::enrich::ModelConfig;
+use crate::sync::Recipe;
+
 /// Public HTTP origin of MirrorSelf's reserved port block (12500–12599 in
 /// the host's service registry). Loopback only; see AGENTS.md.
 pub const DEFAULT_ADDR: &str = "127.0.0.1:12500";
@@ -70,6 +73,12 @@ pub struct Config {
     pub pipeline: PipelineConfig,
     #[serde(default)]
     pub server: ServerConfig,
+    /// Optional model for files that rules cannot read (`[model]`).
+    #[serde(default, skip_serializing_if = "ModelConfig::is_unset")]
+    pub model: ModelConfig,
+    /// Scheduled sync recipes (`[[sync]]`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sync: Vec<Recipe>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -125,6 +134,8 @@ impl Config {
             storage: storage.into(),
             pipeline: PipelineConfig::default(),
             server: ServerConfig::default(),
+            model: ModelConfig::default(),
+            sync: Vec::new(),
         }
     }
 

@@ -1,7 +1,7 @@
 //! MCP and REST surfaces over the fixture export.
 
 use mirrorself_core::config::Home;
-use mirrorself_core::{App, ImportKind};
+use mirrorself_core::App;
 use mirrorself_server::mcp::{handle, Session};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -13,7 +13,7 @@ fn app_with_fixture() -> (tempfile::TempDir, App) {
     let home = Home::new(dir.path().join("home"));
     App::init(&home, "server", None).unwrap();
     let app = App::open(home).unwrap();
-    app.import_bytes(ImportKind::AppleHealth, Some("export.xml".into()), FIXTURE, true)
+    app.import_bytes("apple-health", Some("export.xml".into()), FIXTURE, true)
         .unwrap();
     (dir, app)
 }

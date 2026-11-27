@@ -57,13 +57,24 @@ pub struct ParseStats {
     pub malformed: u64,
 }
 
-pub fn looks_like_export(content: &[u8]) -> bool {
+/// The MIME type when `content` is a Health export: a zip that holds an
+/// `export.xml`, or that XML on its own. Other zips are not claimed, so
+/// auto-detection can pass them on to other sources.
+pub fn detect(content: &[u8]) -> Option<&'static str> {
     if content.starts_with(b"PK\x03\x04") {
-        return true;
+        let archive = zip::ZipArchive::new(Cursor::new(content)).ok()?;
+        let has_export = archive.file_names().any(is_export_xml);
+        return has_export.then_some("application/zip");
     }
     // The Health app's export.xml opens with a DTD of roughly 10 KB.
     let head = &content[..content.len().min(64 * 1024)];
-    head.windows(b"<HealthData".len()).any(|w| w == b"<HealthData")
+    head.windows(b"<HealthData".len())
+        .any(|w| w == b"<HealthData")
+        .then_some("application/xml")
+}
+
+fn is_export_xml(name: &str) -> bool {
+    !name.starts_with("__MACOSX") && name.rsplit('/').next() == Some("export.xml")
 }
 
 /// Calls `sink` for every record and workout in an export.
@@ -73,7 +84,7 @@ pub fn parse(content: &[u8], mut sink: impl FnMut(Item) -> Result<()>) -> Result
             zip::ZipArchive::new(Cursor::new(content)).context("export.zip is not a readable zip")?;
         let name = archive
             .file_names()
-            .find(|n| !n.starts_with("__MACOSX") && n.rsplit('/').next() == Some("export.xml"))
+            .find(|n| is_export_xml(n))
             .map(str::to_owned)
             .context("export.zip has no export.xml")?;
         let file = archive.by_name(&name)?;

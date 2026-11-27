@@ -8,7 +8,12 @@ use rusqlite::Connection;
 use crate::codes;
 use crate::crypto::SubKeys;
 
-const MIGRATIONS: &[&str] = &[include_str!("schema/0001_init.sql")];
+/// In file-number order. A migration's position here is its
+/// `PRAGMA user_version`, so entries are only ever appended.
+const MIGRATIONS: &[&str] = &[
+    include_str!("schema/0001_init.sql"),
+    include_str!("schema/0002_items.sql"),
+];
 
 pub fn open(path: &Path, keys: &SubKeys) -> Result<Connection> {
     let conn = Connection::open(path).with_context(|| format!("opening {}", path.display()))?;

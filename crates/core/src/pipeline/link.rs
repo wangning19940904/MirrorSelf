@@ -70,6 +70,10 @@ pub(super) fn index_search(conn: &Connection) -> Result<Value> {
          INSERT INTO search_fts (kind, ref_id, local_date, title, body)
            SELECT 'entity', id, NULL, name, kind || ' ' || aliases FROM entities;
          INSERT INTO search_fts (kind, ref_id, local_date, title, body)
+           SELECT 'item', id, local_date, coalesce(title, type),
+                  type || ' ' || coalesce(subtype, '') || ' ' || coalesce(place, '') || ' ' || coalesce(text, '')
+           FROM items WHERE status != 'rejected';
+         INSERT INTO search_fts (kind, ref_id, local_date, title, body)
            SELECT 'metric', code, NULL, display, code || ' ' || coalesce(display_zh, '') || ' ' || category_id
            FROM codes;",
     )?;

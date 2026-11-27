@@ -11,17 +11,29 @@ use serde_json::{json, Value};
 use crate::config::{Config, Home};
 use crate::crypto::{random_bytes, VaultKey};
 use crate::error::{conflict, invalid, not_found, UserError};
-use crate::importers::apple_health;
 use crate::pipeline::{self, ProcessReport};
 use crate::query::QueryService;
+use crate::sources::{self, ImportSpec};
 use crate::storage;
 use crate::time::now_utc_precise;
 use crate::vault::{RawMeta, Vault};
 use crate::db;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ImportKind {
-    AppleHealth,
+/// Source name that asks [`App::import_bytes`] to detect the format.
+pub const AUTO_SOURCE: &str = "auto";
+
+/// How a raw object is labelled in the vault. The label is permanent.
+#[derive(Debug, Clone)]
+pub struct RawInput {
+    /// `raw_objects.source`, e.g. `apple_health`.
+    pub source: String,
+    /// `raw_objects.kind`; selects the processors that run on the object.
+    pub kind: String,
+    pub mime: String,
+    /// File name, if it came from a file.
+    pub name: Option<String>,
+    /// Where it came from: a file name, or a sync recipe and its window.
+    pub origin_ref: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -39,6 +51,10 @@ pub struct ImportReport {
     /// False when the vault already held identical bytes.
     pub created: bool,
     pub bytes: u64,
+    /// How the object was labelled (for bytes already in the vault, how this
+    /// call would have labelled them).
+    pub source: String,
+    pub kind: String,
     pub process: Option<ProcessReport>,
 }
 
@@ -121,39 +137,73 @@ impl App {
             .to_string())
     }
 
-    pub fn import_file(&self, kind: ImportKind, path: &Path, process: bool) -> Result<ImportReport> {
+    /// Imports a file as `source` (an import name from the source registry,
+    /// e.g. `apple-health`, or `auto`).
+    pub fn import_file(&self, source: &str, path: &Path, process: bool) -> Result<ImportReport> {
         let content = fs::read(path).with_context(|| format!("reading {}", path.display()))?;
         let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
-        self.import_bytes(kind, name, &content, process)
+        self.import_bytes(source, name, &content, process)
     }
 
-    /// Stores the bytes in the vault (once), registers them, and optionally
-    /// runs the pipeline.
+    /// Checks that the bytes are what `source` expects, stores them in the
+    /// vault (once), registers them, and optionally runs the pipeline.
     pub fn import_bytes(
         &self,
-        kind: ImportKind,
+        source: &str,
         name: Option<String>,
         content: &[u8],
         process: bool,
     ) -> Result<ImportReport> {
-        let meta = match kind {
-            ImportKind::AppleHealth => {
-                if !apple_health::looks_like_export(content) {
-                    return Err(invalid(
-                        "not an Apple Health export (expected export.zip or export.xml from the Health app)",
-                    ));
-                }
-                let zipped = content.starts_with(b"PK\x03\x04");
-                RawMeta {
-                    source: apple_health::SOURCE.into(),
-                    kind: apple_health::KIND.into(),
-                    mime: if zipped { "application/zip" } else { "application/xml" }.into(),
+        if source == AUTO_SOURCE {
+            return self.import_auto(name, content, process);
+        }
+        let Some(spec) = sources::import_spec(source) else {
+            let known: Vec<&str> = sources::import_specs().map(|s| s.name).collect();
+            return Err(invalid(format!(
+                "unknown source '{source}'. Known sources: {}, {AUTO_SOURCE}",
+                known.join(", ")
+            )));
+        };
+        let Some(mime) = (spec.detect)(name.as_deref(), content) else {
+            return Err(invalid(format!("this is not {}", spec.expects)));
+        };
+        self.ingest(labelled(spec, mime, name), content, process)
+    }
+
+    /// Imports bytes of unknown origin, as an upload does: the first source
+    /// that recognises them wins, and anything else is kept as a generic
+    /// file (`file_pdf`, `file_image`, `file_text` or `file_other`).
+    pub fn import_auto(&self, name: Option<String>, content: &[u8], process: bool) -> Result<ImportReport> {
+        let recognised = sources::import_specs()
+            .find_map(|spec| (spec.detect)(name.as_deref(), content).map(|mime| (spec, mime)));
+        let input = match recognised {
+            Some((spec, mime)) => labelled(spec, mime, name),
+            None => {
+                let (kind, mime) = sources::generic_file_kind(name.as_deref(), content);
+                RawInput {
+                    source: sources::SOURCE_FILE.into(),
+                    kind: kind.into(),
+                    mime: mime.into(),
                     name: name.clone(),
                     origin_ref: name,
-                    received_at: now_utc_precise(),
-                    bytes: content.len() as u64,
                 }
             }
+        };
+        self.ingest(input, content, process)
+    }
+
+    /// Stores already-labelled bytes: the entry point for anything that is
+    /// not a user-supplied file, such as a sync response. Nothing checks
+    /// that the bytes match the label.
+    pub fn ingest(&self, input: RawInput, content: &[u8], process: bool) -> Result<ImportReport> {
+        let meta = RawMeta {
+            source: input.source,
+            kind: input.kind,
+            mime: input.mime,
+            name: input.name,
+            origin_ref: input.origin_ref,
+            received_at: now_utc_precise(),
+            bytes: content.len() as u64,
         };
         let put = self.vault.put(&meta, content)?;
         if put.created {
@@ -164,12 +214,14 @@ impl App {
             raw_id: put.id,
             created: put.created,
             bytes: meta.bytes,
+            source: meta.source,
+            kind: meta.kind,
             process,
         })
     }
 
     pub fn process(&self, rebuild: bool) -> Result<ProcessReport> {
-        pipeline::process(&self.conn, &self.vault, &self.config.pipeline, rebuild)
+        pipeline::process(&self.conn, &self.vault, &self.config, rebuild)
     }
 
     pub fn raw_list(&self) -> Result<Value> {
@@ -202,6 +254,16 @@ impl App {
             return Err(not_found(format!("no raw object '{id}'")));
         }
         self.vault.get(id)
+    }
+}
+
+fn labelled(spec: &ImportSpec, mime: &str, name: Option<String>) -> RawInput {
+    RawInput {
+        source: spec.source.into(),
+        kind: spec.kind.into(),
+        mime: mime.into(),
+        name: name.clone(),
+        origin_ref: name,
     }
 }
 
