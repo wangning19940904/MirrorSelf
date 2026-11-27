@@ -1,0 +1,8 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "{\"total_count\":1,\"incomplete_results\":false,\"items\":[{\"url\":\"https://api.github.com/repos/octo-dev/mirror-demo/issues/14\",\"repository_url\":\"https://api.github.com/repos/octo-dev/mirror-demo\",\"html_url\":\"https://github.com/octo-dev/mirror-demo/pull/14\",\"number\":14,\"state\":\"closed\",\"title\":\"Generic items tier\",\"body\":\"Synthetic pull request body.\",\"user\":{\"login\":\"octo-dev\",\"id\":900001},\"comments\":1,\"created_at\":\"2026-11-02T06:00:00Z\",\"updated_at\":\"2026-11-03T02:00:00Z\",\"closed_at\":\"2026-11-03T02:00:00Z\",\"author_association\":\"OWNER\",\"draft\":false,\"pull_request\":{\"url\":\"https://api.github.com/repos/octo-dev/mirror-demo/pulls/14\",\"html_url\":\"https://github.com/octo-dev/mirror-demo/pull/14\",\"merged_at\":\"2026-11-03T02:00:00Z\"}}]}"
+    }
+  ]
+}

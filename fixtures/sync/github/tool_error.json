@@ -1,0 +1,9 @@
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "failed to search commits: synthetic rate limit"
+    }
+  ],
+  "isError": true
+}
