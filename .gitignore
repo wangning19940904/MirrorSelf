@@ -3,3 +3,7 @@
 *.db-wal
 *.db-shm
 .mirrorself/
+# Rendered eval reports are reproducible (tools/report-fixtures/regenerate.sh);
+# only their specs and recorded OCR are kept.
+/fixtures/reports/eval/*.pdf
+/fixtures/reports/eval/*.jpg

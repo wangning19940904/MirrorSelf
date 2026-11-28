@@ -13,6 +13,10 @@ use rusqlite::{params, Connection, ErrorCode, OptionalExtension};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
+mod labs;
+
+pub use labs::{untrusted, ReviewQuery, UNTRUSTED_CLOSE, UNTRUSTED_OPEN};
+
 use crate::codes::{self, MetricDef, ASLEEP_CODES, METRICS, SLEEP_TOTAL};
 use crate::error::{denied, invalid, not_found};
 use crate::time::{month_start, today_local, week_start, DateRange};
@@ -85,6 +89,7 @@ pub struct CompareQuery {
 
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct LabQuery {
+    /// LOINC code (`13457-7`, `LOINC:13457-7`) or a name (`LDL-C`, `低密度脂蛋白胆固醇`).
     pub analyte: Option<String>,
     pub from: Option<String>,
     pub to: Option<String>,
@@ -95,7 +100,7 @@ pub struct SearchQuery {
     pub query: String,
     pub from: Option<String>,
     pub to: Option<String>,
-    /// `event`, `entity`, `metric`.
+    /// `event`, `entity`, `metric`, `analyte`, `document`.
     #[serde(default)]
     pub kinds: Vec<String>,
     pub limit: Option<u32>,
@@ -141,7 +146,8 @@ const SEARCH_COLUMNS: &str = "search_fts.kind, search_fts.ref_id, search_fts.loc
 const SEARCH_JOINS: &str = "FROM search_fts
      LEFT JOIN events e ON search_fts.kind = 'event' AND e.id = search_fts.ref_id
      LEFT JOIN items i ON search_fts.kind = 'item' AND i.id = search_fts.ref_id
-     LEFT JOIN transactions t ON search_fts.kind = 'transaction' AND t.id = search_fts.ref_id";
+     LEFT JOIN transactions t ON search_fts.kind = 'transaction' AND t.id = search_fts.ref_id
+     LEFT JOIN documents d ON search_fts.kind = 'document' AND d.id = search_fts.ref_id";
 const SEARCH_FILTERS: &str = "(?2 IS NULL OR search_fts.kind IN (SELECT value FROM json_each(?2)))
      AND (search_fts.local_date IS NULL OR search_fts.local_date BETWEEN ?3 AND ?4)";
 const SEARCH_TEXT: &str = "lower(coalesce(search_fts.title, '') || ' ' || coalesce(search_fts.body, ''))";
@@ -264,7 +270,7 @@ impl<'c> QueryService<'c> {
                 "SELECT coalesce(source_name, 'unknown'), min(source_tier), count(*),
                         sum(status = 'duplicate'), min(local_date), max(local_date)
                  FROM observations
-                 WHERE code NOT IN (SELECT code FROM codes WHERE category_id IN (SELECT value FROM json_each(?1)))
+                 WHERE code_system = 'ms' AND code NOT IN (SELECT code FROM codes WHERE category_id IN (SELECT value FROM json_each(?1)))
                  GROUP BY source_name ORDER BY count(*) DESC, source_name",
             )?
             .query_map([serde_json::to_string(codes::RECORD_CATEGORIES)?], |r| {
@@ -361,6 +367,14 @@ impl<'c> QueryService<'c> {
             }
         }
 
+        let (documents, first_report, last_report, lab_results, pending_review): (i64, Option<String>, Option<String>, i64, i64) =
+            self.conn.query_row(
+                "SELECT count(*), min(issued_at), max(issued_at), coalesce(sum(results), 0), coalesce(sum(pending_review), 0)
+                 FROM v_documents",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )?;
+
         Ok(json!({
             "raw_objects": { "count": raw_count, "first_received": first_received, "last_received": last_received },
             "coverage": coverage,
@@ -369,11 +383,15 @@ impl<'c> QueryService<'c> {
             "transactions": transactions,
             "items": items,
             "latest": latest,
+            "documents": {
+                "count": documents, "first_report": first_report, "last_report": last_report,
+                "lab_results": lab_results, "pending_review": pending_review,
+            },
             "notes": [
                 "Values are informational, not medical advice. Baselines are the mean of the previous 28 days with data (at least 7).",
                 "coverage lists every daily metric, including ms:spend (from bills) and ms:meeting_minutes / ms:meeting_count (from the calendar); sources lists measuring devices and apps only.",
                 "Meetings, commits and pull requests are events; transactions and dated items also appear on the timeline.",
-                "Lab results arrive with checkup-report import (milestone M2)."
+                "Lab results come from imported checkup reports (get_lab_results, compare_lab_results); flags and ranges are as printed on each report."
             ],
         }))
     }
@@ -649,46 +667,6 @@ impl<'c> QueryService<'c> {
         Ok(out)
     }
 
-    pub fn lab_results(&self, q: &LabQuery) -> Result<Value> {
-        let range = DateRange::parse(q.from.as_deref(), q.to.as_deref(), self.today)?;
-        let results = self
-            .conn
-            .prepare(
-                "SELECT id, code, display, value_num, value_text, unit, ref_low, ref_high, flag,
-                        observed_at, local_date, document_id, raw_id, confidence, status
-                 FROM v_labs
-                 WHERE (?1 IS NULL OR code = ?1 OR display LIKE '%' || ?1 || '%')
-                   AND local_date BETWEEN ?2 AND ?3
-                 ORDER BY observed_at DESC, id",
-            )?
-            .query_map(
-                params![q.analyte, range.from.to_string(), range.to.to_string()],
-                |r| {
-                    let id: String = r.get(0)?;
-                    let raw_id: String = r.get(12)?;
-                    Ok(json!({
-                        "id": id, "code": r.get::<_, String>(1)?, "display": r.get::<_, Option<String>>(2)?,
-                        "value": r.get::<_, Option<f64>>(3)?, "value_text": r.get::<_, Option<String>>(4)?,
-                        "unit": r.get::<_, Option<String>>(5)?, "ref_low": r.get::<_, Option<f64>>(6)?,
-                        "ref_high": r.get::<_, Option<f64>>(7)?, "flag_as_printed": r.get::<_, Option<String>>(8)?,
-                        "observed_at": r.get::<_, String>(9)?, "local_date": r.get::<_, String>(10)?,
-                        "document_id": r.get::<_, Option<String>>(11)?, "confidence": r.get::<_, f64>(13)?,
-                        "status": r.get::<_, String>(14)?,
-                        "citations": [{ "record_id": id, "source": "observations", "raw_id": raw_id }],
-                    }))
-                },
-            )?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        let empty = results.is_empty();
-        let mut out = json!({ "count": results.len(), "results": results });
-        if empty {
-            out["note"] = json!(
-                "No lab results yet. Checkup-report import (PDF or photo → reviewed lab rows) arrives in milestone M2."
-            );
-        }
-        Ok(out)
-    }
-
     /// Full-text search over events, entities, items, transactions and
     /// metric names. Words match by prefix through the index. A query with
     /// Chinese, Japanese or Korean characters matches as substrings instead,
@@ -712,7 +690,7 @@ impl<'c> QueryService<'c> {
                     "SELECT {SEARCH_COLUMNS},
                             substr(coalesce(search_fts.title, '') || ' ' || coalesce(search_fts.body, ''),
                                    max(1, instr({SEARCH_TEXT}, json_extract(?1, '$[0]')) - 12), 60),
-                            0.0, coalesce(e.raw_id, i.raw_id, t.raw_id)
+                            0.0, coalesce(e.raw_id, i.raw_id, t.raw_id, d.raw_id)
                      {SEARCH_JOINS}
                      WHERE NOT EXISTS (SELECT 1 FROM json_each(?1) AS term WHERE instr({SEARCH_TEXT}, term.value) = 0)
                        AND {SEARCH_FILTERS}
@@ -725,7 +703,7 @@ impl<'c> QueryService<'c> {
             (
                 format!(
                     "SELECT {SEARCH_COLUMNS}, snippet(search_fts, -1, '[', ']', '…', 12), -bm25(search_fts),
-                            coalesce(e.raw_id, i.raw_id, t.raw_id)
+                            coalesce(e.raw_id, i.raw_id, t.raw_id, d.raw_id)
                      {SEARCH_JOINS}
                      WHERE search_fts MATCH ?1
                        AND {SEARCH_FILTERS}
@@ -748,16 +726,23 @@ impl<'c> QueryService<'c> {
                         "entity" => "entities",
                         "item" => "items",
                         "transaction" => "transactions",
+                        "document" => "documents",
                         _ => "codes",
                     };
-                    Ok(json!({
+                    let snippet: String = r.get(4)?;
+                    let mut hit = json!({
                         "kind": kind, "id": id,
                         "local_date": r.get::<_, Option<String>>(2)?,
                         "title": r.get::<_, String>(3)?,
-                        "snippet": r.get::<_, String>(4)?,
+                        "snippet": snippet,
                         "score": r2(r.get::<_, f64>(5)?),
                         "citations": [{ "record_id": id, "source": source, "raw_id": r.get::<_, Option<String>>(6)? }],
-                    }))
+                    });
+                    if kind == "document" {
+                        // Document text is untrusted input (§11).
+                        hit["snippet"] = untrusted(&snippet);
+                    }
+                    Ok(hit)
                 },
             )?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -1032,33 +1017,6 @@ impl<'c> QueryService<'c> {
         }))
     }
 
-    pub fn document(&self, id: &str, include_text: bool) -> Result<Value> {
-        let doc = self
-            .conn
-            .query_row(
-                "SELECT id, raw_id, doc_type, issued_at, provider_id, language, pages, text FROM documents WHERE id = ?1",
-                [id],
-                |r| {
-                    Ok(json!({
-                        "id": r.get::<_, String>(0)?, "raw_id": r.get::<_, String>(1)?,
-                        "doc_type": r.get::<_, String>(2)?, "issued_at": r.get::<_, Option<String>>(3)?,
-                        "provider_id": r.get::<_, Option<String>>(4)?, "language": r.get::<_, Option<String>>(5)?,
-                        "pages": r.get::<_, Option<i64>>(6)?,
-                        "text": if include_text { r.get::<_, Option<String>>(7)? } else { None },
-                    }))
-                },
-            )
-            .optional()?;
-        let mut doc = doc.ok_or_else(|| {
-            not_found(format!("no document '{id}' (document import arrives in milestone M2)"))
-        })?;
-        if include_text {
-            // Extracted text is untrusted input: keep it in a delimited field, never as instructions.
-            doc["text_is_untrusted"] = json!(true);
-        }
-        Ok(doc)
-    }
-
     /// Read-only SQL over the `v_*` views, with a row cap and a time limit.
     pub fn run_sql(&self, sql: &str) -> Result<Value> {
         let sql = sql.trim().trim_end_matches(';').trim();
@@ -1167,6 +1125,13 @@ impl<'c> QueryService<'c> {
             .collect::<rusqlite::Result<_>>()?;
         for (name, sql) in views {
             doc.push_str(&format!("\n## {name}\n\n```sql\n{sql}\n```\n"));
+        }
+        doc.push_str(
+            "\n## Lab analytes (LOINC)\n\nLab values in `v_labs` use these codes; `unit` is as printed, \
+             `value_canonical` is in the unit below.\n\n| code | display | 中文 | canonical unit |\n|---|---|---|---|\n",
+        );
+        for a in crate::labs::ANALYTES {
+            doc.push_str(&format!("| {} | {} | {} | {} |\n", a.loinc, a.display, a.display_zh, a.unit));
         }
         doc.push_str("\n## Metric codes\n\n| code | display | unit | category | daily stat |\n|---|---|---|---|---|\n");
         for d in METRICS {

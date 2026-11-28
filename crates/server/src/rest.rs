@@ -16,7 +16,9 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use mirrorself_core::audit;
 use mirrorself_core::error::{conflict, invalid, user_error, UserError};
-use mirrorself_core::App;
+use mirrorself_core::ops::Edit;
+use mirrorself_core::query::ReviewQuery;
+use mirrorself_core::{App, Decision};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -78,7 +80,11 @@ impl Hub {
             .route("/v1/metrics/{code}/series", get(series))
             .route("/v1/metrics/{code}/compare", get(compare))
             .route("/v1/labs", get(labs))
+            .route("/v1/labs/compare", get(labs_compare))
+            .route("/v1/documents", get(documents))
             .route("/v1/documents/{id}", get(document))
+            .route("/v1/review", get(review_list))
+            .route("/v1/review/{id}", post(review_decide))
             .route("/v1/entities", get(entities))
             .route("/v1/entities/{id}/links", get(entity_links))
             .route("/v1/search", get(search))
@@ -359,6 +365,27 @@ struct SqlBody {
 }
 
 #[derive(Deserialize)]
+struct CompareLabParams {
+    code: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ReviewParams {
+    all: Option<bool>,
+    document: Option<String>,
+    limit: Option<u32>,
+}
+
+/// `POST /v1/review/{id}`: `{"action": "confirm" | "edit" | "reject", …}`.
+#[derive(Deserialize)]
+struct ReviewBody {
+    action: String,
+    #[serde(flatten)]
+    edit: Edit,
+    reason: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct AuditParams {
     limit: Option<u32>,
 }
@@ -389,6 +416,56 @@ async fn compare(State(s): State<AppState>, Path(code): Path<String>, Query(p): 
 
 async fn labs(State(s): State<AppState>, Query(p): Query<LabParams>) -> Response {
     tool(&s, "get_lab_results", json!({ "analyte": p.code, "from": p.from, "to": p.to })).await
+}
+
+async fn labs_compare(State(s): State<AppState>, Query(p): Query<CompareLabParams>) -> Response {
+    tool(&s, "compare_lab_results", json!({ "analyte": p.code })).await
+}
+
+/// Runs `f` and records it in the audit log like a tool call.
+async fn audited<F>(s: &AppState, action: &'static str, scope: &'static str, request: Value, f: F) -> Response
+where
+    F: FnOnce(&App) -> Result<Value> + Send + 'static,
+{
+    let result = blocking(s, move |app| {
+        let result = f(app);
+        let entry = audit::Entry { actor: ACTOR, client_id: CLIENT, action, scope, request: &request };
+        audit::record(app.conn(), &entry, &result)?;
+        result
+    })
+    .await;
+    match result {
+        Ok(v) => Json(v).into_response(),
+        Err(e) => error_response(e),
+    }
+}
+
+async fn documents(State(s): State<AppState>) -> Response {
+    audited(&s, "list_documents", "health:documents", json!({}), |app| app.query().documents()).await
+}
+
+async fn review_list(State(s): State<AppState>, Query(p): Query<ReviewParams>) -> Response {
+    let request = json!({ "all": p.all, "document": p.document, "limit": p.limit });
+    audited(&s, "review_list", "health:labs", request, move |app| {
+        app.query().review_queue(&ReviewQuery { all: p.all.unwrap_or(false), document: p.document, limit: p.limit })
+    })
+    .await
+}
+
+/// Confirms, edits or rejects one extracted value. The decision is a user op:
+/// it is kept in the vault and survives `process --rebuild`.
+async fn review_decide(State(s): State<AppState>, Path(id): Path<String>, Json(body): Json<ReviewBody>) -> Response {
+    let request = json!({ "id": id, "action": body.action });
+    audited(&s, "review_decide", "health:write", request, move |app| {
+        let decision = match body.action.as_str() {
+            "confirm" => Decision::Confirm,
+            "edit" => Decision::Edit(body.edit),
+            "reject" => Decision::Reject { reason: body.reason },
+            other => return Err(invalid(format!("action '{other}' must be confirm, edit or reject"))),
+        };
+        app.review(&id, decision, ACTOR)
+    })
+    .await
 }
 
 async fn document(State(s): State<AppState>, Path(id): Path<String>, Query(p): Query<DocumentParams>) -> Response {

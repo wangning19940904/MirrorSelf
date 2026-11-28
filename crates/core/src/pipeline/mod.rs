@@ -16,6 +16,7 @@ mod derive;
 pub(crate) mod feishu_calendar;
 pub(crate) mod files;
 mod link;
+pub mod report;
 mod sleep;
 
 use std::collections::HashSet;
@@ -28,6 +29,8 @@ use serde_json::Value;
 
 use crate::config::Config;
 use crate::ids::stable_id;
+use crate::models::ModelProvider;
+use crate::ops;
 use crate::sources::{GlobalCtx, GlobalStage, RawCtx, RawProcessor, SOURCES};
 use crate::time::now_utc_string;
 use crate::vault::{RawMeta, Vault};
@@ -125,7 +128,13 @@ pub struct RunReport {
     pub elapsed_ms: u128,
 }
 
-pub fn process(conn: &Connection, vault: &Vault, config: &Config, rebuild: bool) -> Result<ProcessReport> {
+pub fn process(
+    conn: &Connection,
+    vault: &Vault,
+    config: &Config,
+    models: &dyn ModelProvider,
+    rebuild: bool,
+) -> Result<ProcessReport> {
     let started = Instant::now();
     let mut report = ProcessReport {
         rebuilt: rebuild,
@@ -138,7 +147,7 @@ pub fn process(conn: &Connection, vault: &Vault, config: &Config, rebuild: bool)
 
     let pending = pending_raw(conn)?;
     for raw in &pending {
-        report.runs.push(run_raw(conn, vault, config, raw)?);
+        report.runs.push(run_raw(conn, vault, config, models, raw)?);
     }
     if rebuild || !pending.is_empty() || global_stale(conn)? {
         report.runs.extend(run_global(conn, vault, config)?);
@@ -170,10 +179,11 @@ pub(crate) fn insert_raw(conn: &Connection, vault: &Vault, id: &str, meta: &RawM
 }
 
 /// Re-registers vault objects the index doesn't know, e.g. after `index.db`
-/// was deleted or the vault was synced from another host.
+/// was deleted or the vault was synced from another host. Lab review ops
+/// (`user_op`) go back into the op log; everything else is a raw object.
 fn register_vault_objects(conn: &Connection, vault: &Vault) -> Result<usize> {
     let known: HashSet<String> = conn
-        .prepare("SELECT id FROM raw_objects")?
+        .prepare("SELECT id FROM raw_objects UNION ALL SELECT id FROM ops_log")?
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     let mut added = 0;
@@ -181,8 +191,11 @@ fn register_vault_objects(conn: &Connection, vault: &Vault) -> Result<usize> {
         if known.contains(&id) {
             continue;
         }
-        let (meta, _) = vault.get(&id)?;
-        if insert_raw(conn, vault, &id, &meta)? {
+        let (meta, content) = vault.get(&id)?;
+        if meta.kind == ops::KIND {
+            let op: ops::Op = serde_json::from_slice(&content)?;
+            ops::insert(conn, &id, &op)?;
+        } else if insert_raw(conn, vault, &id, &meta)? {
             added += 1;
         }
     }
@@ -308,7 +321,13 @@ fn record_run(
     Ok(())
 }
 
-fn run_raw(conn: &Connection, vault: &Vault, config: &Config, raw: &PendingRaw) -> Result<RunReport> {
+fn run_raw(
+    conn: &Connection,
+    vault: &Vault,
+    config: &Config,
+    models: &dyn ModelProvider,
+    raw: &PendingRaw,
+) -> Result<RunReport> {
     let p = &raw.processor.processor;
     let run = run_id(p, Some(&raw.id));
     let started_at = now_utc_string();
@@ -323,6 +342,7 @@ fn run_raw(conn: &Connection, vault: &Vault, config: &Config, raw: &PendingRaw) 
             raw_id: &raw.id,
             meta: &meta,
             run_id: &run,
+            models,
         };
         let outputs = (raw.processor.load)(&tx, &ctx, &content)?;
         record_run(&tx, &run, p, Some(&raw.id), "ok", &started_at, Some(&outputs), None)?;

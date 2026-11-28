@@ -6,6 +6,7 @@ use anyhow::{Context, Result};
 use rusqlite::Connection;
 
 use crate::codes;
+use crate::labs;
 use crate::crypto::SubKeys;
 
 /// In file-number order. A migration's position here is its
@@ -17,6 +18,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("schema/0004_sync.sql"),
     include_str!("schema/0005_enrich.sql"),
     include_str!("schema/0006_timeline.sql"),
+    include_str!("schema/0007_checkup_reports.sql"),
 ];
 
 pub fn open(path: &Path, keys: &SubKeys) -> Result<Connection> {
@@ -29,6 +31,7 @@ pub fn open(path: &Path, keys: &SubKeys) -> Result<Connection> {
     pragma(&conn, "PRAGMA synchronous = NORMAL")?;
     migrate(&conn)?;
     codes::seed(&conn)?;
+    labs::seed(&conn)?;
     Ok(conn)
 }
 

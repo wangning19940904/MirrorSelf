@@ -16,9 +16,12 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use mirrorself_core::config::Home;
 use mirrorself_core::error::{invalid, user_error, UserError};
-use mirrorself_core::query::{CompareQuery, LabQuery, Period, SearchQuery, SeriesQuery, TimelineQuery};
+use mirrorself_core::config::OcrConfig;
+use mirrorself_core::models::{self, recorded::Recording};
+use mirrorself_core::ops::Edit;
+use mirrorself_core::query::{CompareQuery, LabQuery, Period, ReviewQuery, SearchQuery, SeriesQuery, TimelineQuery};
 use mirrorself_core::synth::{self, SynthOptions};
-use mirrorself_core::App;
+use mirrorself_core::{eval, synth_report, App, Decision, Lang};
 use serde_json::{json, Value};
 
 #[derive(Parser)]
@@ -51,6 +54,9 @@ enum Command {
         /// to detect it
         source: String,
         path: PathBuf,
+        /// For `report` (a checkup report, PDF or photo): its language, a hint for OCR
+        #[arg(long, value_parser = ["zh", "en"])]
+        lang: Option<String>,
         /// Only store it; run `mirrorself process` later
         #[arg(long)]
         no_process: bool,
@@ -96,14 +102,30 @@ enum Command {
         #[arg(long)]
         stat: Option<String>,
     },
-    /// Lab results from checkup reports (available from M2)
+    /// Lab results from checkup reports; --compare lines them up across reports
     Labs {
+        /// LOINC code (13457-7, LOINC:13457-7) or name (LDL-C, 低密度脂蛋白胆固醇)
         #[arg(long)]
         analyte: Option<String>,
         #[arg(long)]
         from: Option<String>,
         #[arg(long)]
         to: Option<String>,
+        /// Checkup comparison: each analyte across reports with each report's own range and flag
+        #[arg(long)]
+        compare: bool,
+    },
+    /// Extracted lab values waiting for review; confirm, edit or reject them
+    #[command(subcommand)]
+    Review(ReviewCmd),
+    /// Imported documents (checkup reports)
+    Documents,
+    /// One document with its pages and lab values
+    Document {
+        id: String,
+        /// Include the extracted text (untrusted document content)
+        #[arg(long)]
+        text: bool,
     },
     /// Full-text search over events, entities and metric names
     Search {
@@ -152,6 +174,54 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+enum ReviewCmd {
+    /// Values waiting for review, with the reason and the page they came from
+    List {
+        /// Also list unverified values that passed every check
+        #[arg(long)]
+        all: bool,
+        /// Only this document
+        #[arg(long)]
+        document: Option<String>,
+    },
+    /// Confirm values as read
+    Confirm {
+        #[arg(required = true)]
+        ids: Vec<String>,
+    },
+    /// Correct a value, then confirm it
+    Edit {
+        id: String,
+        #[arg(long)]
+        value: Option<f64>,
+        /// A qualitative result (阴性, negative) or a censored one (<0.10)
+        #[arg(long)]
+        text: Option<String>,
+        #[arg(long)]
+        unit: Option<String>,
+        #[arg(long)]
+        loinc: Option<String>,
+        #[arg(long)]
+        ref_low: Option<f64>,
+        #[arg(long)]
+        ref_high: Option<f64>,
+        /// The flag as printed (↑, H, …)
+        #[arg(long)]
+        flag: Option<String>,
+        /// The report date, YYYY-MM-DD
+        #[arg(long)]
+        date: Option<String>,
+    },
+    /// Reject values that are not real results
+    Reject {
+        #[arg(required = true)]
+        ids: Vec<String>,
+        #[arg(long)]
+        reason: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum RawCmd {
     /// List raw objects
     List,
@@ -189,6 +259,33 @@ enum DevCmd {
         seed: u64,
         #[arg(long)]
         out: PathBuf,
+    },
+    /// Write synthetic checkup-report specs (render them with tools/report-fixtures)
+    SynthReports {
+        #[arg(long, default_value_t = 12)]
+        count: usize,
+        #[arg(long, default_value_t = 42)]
+        seed: u64,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// OCR files with this host's provider; --record saves <file>.ocr.json next to each
+    Ocr {
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        #[arg(long, value_parser = ["zh", "en"])]
+        lang: Option<String>,
+        #[arg(long)]
+        record: bool,
+    },
+    /// Score extraction against report specs in a directory
+    EvalReports {
+        dir: PathBuf,
+        /// OCR the rendered files now instead of replaying recordings
+        #[arg(long)]
+        live: bool,
+        #[arg(long, default_value_t = 0.9)]
+        threshold: f64,
     },
 }
 
@@ -243,6 +340,40 @@ fn run(cli: Cli) -> Result<()> {
                 render::synth,
             );
         }
+        Command::Dev(DevCmd::SynthReports { count, seed, out: dir }) => {
+            std::fs::create_dir_all(&dir)?;
+            let specs = synth_report::eval_specs(count, seed);
+            for spec in &specs {
+                let path = dir.join(format!("{}.json", spec.id));
+                std::fs::write(&path, serde_json::to_string_pretty(spec)? + "\n")?;
+            }
+            out(json!({ "dir": dir.display().to_string(), "reports": specs.len() }), render::pretty);
+        }
+        Command::Dev(DevCmd::Ocr { files, lang, record }) => {
+            let provider = models::from_config(&OcrConfig::default())?;
+            let lang = lang.as_deref().map(Lang::parse).transpose()?;
+            let mut done = Vec::new();
+            for path in files {
+                let bytes = std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+                let mime = mirrorself_core::importers::report::sniff(&bytes)
+                    .ok_or_else(|| invalid(format!("{} is not a supported report file", path.display())))?;
+                let ocr = provider.ocr(&models::DocumentInput { mime, bytes: &bytes, lang: lang.map(Lang::as_str) })?;
+                let file = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                if record {
+                    let rec = Recording { sha256: mirrorself_core::crypto::sha256_hex(&bytes), file: file.clone(), ocr: ocr.clone() };
+                    let target = path.with_file_name(format!("{file}.ocr.json"));
+                    std::fs::write(&target, serde_json::to_string(&rec)? + "\n")?;
+                }
+                let x = provider.extract(&ocr, lang.map(Lang::as_str))?;
+                done.push(json!({ "file": file, "pages": ocr.pages.len(), "extraction": x }));
+            }
+            out(json!({ "files": done }), render::pretty);
+        }
+        Command::Dev(DevCmd::EvalReports { dir, live, threshold }) => {
+            let provider = if live { Some(models::from_config(&OcrConfig::default())?) } else { None };
+            let (scores, summary) = eval::run_dir(&dir, provider.as_deref(), threshold)?;
+            out(json!({ "summary": summary, "documents": scores }), render::eval);
+        }
         Command::Serve { addr } => {
             let app = App::open(home)?;
             let addr = addr.unwrap_or_else(|| app.config().server.addr.clone());
@@ -263,7 +394,32 @@ fn run(cli: Cli) -> Result<()> {
 fn run_with_app(app: &App, command: Command, out: &dyn Fn(Value, fn(&Value) -> String)) -> Result<()> {
     let q = app.query();
     match command {
-        Command::Import { source, path, no_process } => {
+        Command::Import { source, path, lang, no_process } if source == mirrorself_core::importers::report::IMPORT => {
+            let lang = lang.as_deref().map(Lang::parse).transpose()?;
+            let content = std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+            let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+            let report = app.import_report(name, &content, lang, !no_process)?;
+            let failed: Vec<String> = report
+                .process
+                .iter()
+                .flat_map(|p| p.errors())
+                .filter(|r| r.raw_id.as_deref() == Some(report.raw_id.as_str()))
+                .filter_map(|r| r.error.clone())
+                .collect();
+            let mut v = serde_json::to_value(&report)?;
+            let doc = mirrorself_core::pipeline::report::document_id(&report.raw_id);
+            if let Ok(d) = q.document(&doc, false) {
+                v["document"] = d;
+            }
+            out(v, render::import_report);
+            if let Some(e) = failed.first() {
+                return Err(anyhow::anyhow!("the report was stored but could not be read: {e}"));
+            }
+        }
+        Command::Import { lang: Some(_), .. } => {
+            return Err(invalid("--lang applies to `import report` only"));
+        }
+        Command::Import { source, path, lang: None, no_process } => {
             let report = app.import_file(&source, &path, !no_process)?;
             out(serde_json::to_value(&report)?, render::import);
         }
@@ -291,7 +447,34 @@ fn run_with_app(app: &App, command: Command, out: &dyn Fn(Value, fn(&Value) -> S
             })?;
             out(v, render::compare);
         }
-        Command::Labs { analyte, from, to } => out(q.lab_results(&LabQuery { analyte, from, to })?, render::pretty),
+        Command::Labs { analyte, from, to, compare: true } => {
+            if from.is_some() || to.is_some() {
+                return Err(invalid("--compare spans every report; drop --from and --to"));
+            }
+            out(q.lab_comparison(analyte.as_deref())?, render::lab_comparison)
+        }
+        Command::Labs { analyte, from, to, compare: false } => out(q.lab_results(&LabQuery { analyte, from, to })?, render::labs),
+        Command::Review(ReviewCmd::List { all, document }) => {
+            out(q.review_queue(&ReviewQuery { all, document, limit: None })?, render::review_list)
+        }
+        Command::Review(ReviewCmd::Confirm { ids }) => {
+            let items = ids.iter().map(|id| app.review(id, Decision::Confirm, "cli")).collect::<Result<Vec<_>>>()?;
+            out(json!({ "decision": "confirmed", "items": items }), render::review_done);
+        }
+        Command::Review(ReviewCmd::Edit { id, value, text, unit, loinc, ref_low, ref_high, flag, date }) => {
+            let edit = Edit { value, value_text: text, unit, loinc, ref_low, ref_high, flag, date };
+            let item = app.review(&id, Decision::Edit(edit), "cli")?;
+            out(json!({ "decision": "edited", "items": [item] }), render::review_done);
+        }
+        Command::Review(ReviewCmd::Reject { ids, reason }) => {
+            let items = ids
+                .iter()
+                .map(|id| app.review(id, Decision::Reject { reason: reason.clone() }, "cli"))
+                .collect::<Result<Vec<_>>>()?;
+            out(json!({ "decision": "rejected", "items": items }), render::review_done);
+        }
+        Command::Documents => out(q.documents()?, render::documents),
+        Command::Document { id, text } => out(q.document(&id, text)?, render::pretty),
         Command::Search { query, from, to, kinds, limit } => {
             let v = q.search(&SearchQuery { query, from, to, kinds, limit: Some(limit) })?;
             out(v, render::search);

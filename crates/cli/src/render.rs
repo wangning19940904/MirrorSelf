@@ -290,3 +290,188 @@ pub fn raw_list(v: &Value) -> String {
     }
     out
 }
+
+fn value_text(v: &Value) -> String {
+    let mut out = match (&v["value"], &v["value_text"]) {
+        (Value::Number(n), _) => n.to_string(),
+        (_, Value::String(t)) => t.clone(),
+        _ => "?".into(),
+    };
+    if let Some(u) = v["unit"].as_str() {
+        out.push(' ');
+        out.push_str(u);
+    }
+    out
+}
+
+fn page_ref(v: &Value) -> String {
+    let src = &v["source"];
+    format!("{} p{}", short(src["document_id"].as_str().unwrap_or("?")), s(&src["page"]))
+}
+
+fn short(id: &str) -> &str {
+    &id[..id.len().min(16)]
+}
+
+pub fn import_report(v: &Value) -> String {
+    let mut out = import(v);
+    let d = &v["document"];
+    if d.is_object() {
+        let _ = writeln!(
+            out,
+            "\nDocument {}: {} · {} page(s) · {} result(s), {} waiting for review",
+            s(&d["id"]),
+            s(&d["title"]),
+            s(&d["pages"]),
+            s(&d["results"]),
+            s(&d["pending_review"])
+        );
+        if d["pending_review"].as_i64().unwrap_or(0) > 0 {
+            out.push_str("Next: mirrorself review list\n");
+        }
+    }
+    out
+}
+
+pub fn labs(v: &Value) -> String {
+    let mut out = String::new();
+    for r in v["results"].as_array().into_iter().flatten() {
+        let _ = writeln!(
+            out,
+            "{}  {:<10} {:<28} {:<16} ref {:<12} {:<3} {:<8} {}",
+            s(&r["local_date"]),
+            s(&r["code"]),
+            s(r.get("display").filter(|d| !d.is_null()).unwrap_or(&r["analyte_name_as_printed"])),
+            value_text(r),
+            s(&r["ref_text_as_printed"]),
+            r["flag_as_printed"].as_str().unwrap_or(""),
+            if r["verified"] == true { "verified" } else { "auto" },
+            page_ref(r)
+        );
+    }
+    if v["count"] == 0 {
+        out.push_str("No lab results.\n");
+    }
+    if let Some(n) = v["pending_review"].as_i64().filter(|n| *n > 0) {
+        let _ = writeln!(out, "{n} value(s) are waiting for review: mirrorself review list");
+    }
+    out
+}
+
+pub fn lab_comparison(v: &Value) -> String {
+    let mut out = String::new();
+    for a in v["analytes"].as_array().into_iter().flatten() {
+        let _ = writeln!(out, "{} {} ({}){}", s(&a["code"]), s(&a["display"]), s(&a["display_zh"]),
+            if a["units_differ"] == true { "  [units differ between reports]" } else { "" });
+        for p in a["points"].as_array().into_iter().flatten() {
+            let _ = writeln!(
+                out,
+                "  {}  {:<16} ref {:<12} {:<3} {:<8} {}",
+                s(&p["date"]),
+                value_text(p),
+                s(&p["ref_text_as_printed"]),
+                p["flag_as_printed"].as_str().unwrap_or(""),
+                if p["verified"] == true { "verified" } else { "auto" },
+                s(&p["provider"])
+            );
+        }
+    }
+    if v["count"] == 0 {
+        out.push_str("No lab results to compare.\n");
+    }
+    out.push_str("Ranges and flags are as printed on each report.\n");
+    out
+}
+
+pub fn review_list(v: &Value) -> String {
+    let mut out = String::new();
+    for i in v["items"].as_array().into_iter().flatten() {
+        let reasons: Vec<&str> = i["reasons"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+        let _ = writeln!(
+            out,
+            "{}  {:<26} {:<16} ref {:<12} {:<3} conf {:<4} {:<14} {}",
+            s(&i["id"]),
+            s(&i["analyte_name_as_printed"]),
+            value_text(i),
+            s(&i["ref_text_as_printed"]),
+            i["flag_as_printed"].as_str().unwrap_or(""),
+            s(&i["confidence"]),
+            page_ref(i),
+            if reasons.is_empty() { "unverified".to_string() } else { reasons.join(",") }
+        );
+    }
+    if v["count"] == 0 {
+        out.push_str("Nothing to review.\n");
+    } else {
+        out.push_str("\nmirrorself review confirm <id>… | edit <id> --value … --unit … | reject <id>…\n");
+    }
+    out
+}
+
+pub fn review_done(v: &Value) -> String {
+    let mut out = String::new();
+    for i in v["items"].as_array().into_iter().flatten() {
+        let _ = writeln!(out, "{} {}: {} {}", s(&v["decision"]), s(&i["id"]), s(&i["analyte_name_as_printed"]), value_text(i));
+    }
+    out
+}
+
+pub fn documents(v: &Value) -> String {
+    let mut out = String::new();
+    for d in v["items"].as_array().into_iter().flatten() {
+        let _ = writeln!(
+            out,
+            "{}  {}  {:<40} {:>3} results {:>3} to review  {} page(s)",
+            s(&d["id"]),
+            s(&d["issued_at"]),
+            s(&d["provider"]),
+            s(&d["results"]),
+            s(&d["pending_review"]),
+            s(&d["pages"])
+        );
+    }
+    if v["count"] == 0 {
+        out.push_str("No documents. Import one with `mirrorself import report <file>`.\n");
+    }
+    out
+}
+
+pub fn eval(v: &Value) -> String {
+    let mut out = String::new();
+    for d in v["documents"].as_array().into_iter().flatten() {
+        let _ = writeln!(
+            out,
+            "{:<34} {:>3}/{:<3} correct  {:>3} to review  {:>2} unflagged errors{}",
+            s(&d["file"]),
+            s(&d["correct"]),
+            s(&d["expected"]),
+            s(&d["pending"]),
+            s(&d["unflagged_errors"]),
+            if d["date_correct"] == true { "" } else { "  date wrong" }
+        );
+        for e in d["errors"].as_array().into_iter().flatten() {
+            let _ = writeln!(out, "    error: {}", s(e));
+        }
+        for e in d["missing"].as_array().into_iter().flatten() {
+            let _ = writeln!(out, "    missing: {}", s(e));
+        }
+        for e in d["review"].as_array().into_iter().flatten() {
+            let _ = writeln!(out, "    review: {}", s(e));
+        }
+    }
+    let t = &v["summary"];
+    let _ = writeln!(
+        out,
+        "\n{} documents, {} values: {}% analyte+value+unit correct after extraction, {}% after review, \
+         {} unflagged errors, {}% sent to review, {}/{} report dates correct",
+        s(&t["documents"]),
+        s(&t["expected"]),
+        s(&t["accuracy"]),
+        s(&t["accuracy_after_review"]),
+        s(&t["unflagged_errors"]),
+        s(&t["review_rate"]),
+        s(&t["dates_correct"]),
+        s(&t["documents"])
+    );
+    out
+}

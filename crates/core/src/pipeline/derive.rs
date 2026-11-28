@@ -1,4 +1,5 @@
 //! Daily aggregates and 28-day personal baselines (architecture §5, stage 5a).
+//! Only `ms:` metrics: lab results stay per report (see `v_labs`).
 
 use std::collections::{HashSet, VecDeque};
 
@@ -26,25 +27,25 @@ pub(super) fn run(conn: &Connection, cfg: &PipelineConfig) -> Result<Value> {
          INSERT INTO daily_metrics (date, code, stat, value, n)
          SELECT o.local_date, o.code, 'sum', SUM(o.value_num), COUNT(*)
          FROM observations o JOIN codes c ON c.code = o.code
-         WHERE c.aggregation = 'sum' AND o.status IN ('auto', 'confirmed') AND o.value_num IS NOT NULL
+         WHERE c.code_system = 'ms' AND c.aggregation = 'sum' AND o.status IN ('auto', 'confirmed') AND o.value_num IS NOT NULL
          GROUP BY o.code, o.local_date;
 
          INSERT INTO daily_metrics (date, code, stat, value, n)
          SELECT o.local_date, o.code, 'mean', AVG(o.value_num), COUNT(*)
          FROM observations o JOIN codes c ON c.code = o.code
-         WHERE c.aggregation = 'mean' AND o.status IN ('auto', 'confirmed') AND o.value_num IS NOT NULL
+         WHERE c.code_system = 'ms' AND c.aggregation = 'mean' AND o.status IN ('auto', 'confirmed') AND o.value_num IS NOT NULL
          GROUP BY o.code, o.local_date;
 
          INSERT INTO daily_metrics (date, code, stat, value, n)
          SELECT o.local_date, o.code, 'min', MIN(o.value_num), COUNT(*)
          FROM observations o JOIN codes c ON c.code = o.code
-         WHERE c.minmax = 1 AND o.status IN ('auto', 'confirmed') AND o.value_num IS NOT NULL
+         WHERE c.code_system = 'ms' AND c.minmax = 1 AND o.status IN ('auto', 'confirmed') AND o.value_num IS NOT NULL
          GROUP BY o.code, o.local_date;
 
          INSERT INTO daily_metrics (date, code, stat, value, n)
          SELECT o.local_date, o.code, 'max', MAX(o.value_num), COUNT(*)
          FROM observations o JOIN codes c ON c.code = o.code
-         WHERE c.minmax = 1 AND o.status IN ('auto', 'confirmed') AND o.value_num IS NOT NULL
+         WHERE c.code_system = 'ms' AND c.minmax = 1 AND o.status IN ('auto', 'confirmed') AND o.value_num IS NOT NULL
          GROUP BY o.code, o.local_date;
 
          INSERT INTO daily_metrics (date, code, stat, value, n)

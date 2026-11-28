@@ -14,6 +14,7 @@ use serde_json::Value;
 
 use crate::config::Config;
 use crate::ids::stable_id;
+use crate::models::ModelProvider;
 use crate::pipeline::Processor;
 use crate::vault::{RawMeta, Vault};
 
@@ -31,6 +32,10 @@ pub struct ImportSpec {
     /// strict enough for auto-detection: a wrong match files the object
     /// under the wrong kind for good, since raw objects are immutable.
     pub detect: fn(name: Option<&str>, content: &[u8]) -> Option<&'static str>,
+    /// Whether `import auto` and uploads may pick this source. False for
+    /// formats the bytes cannot prove (a checkup report is just a PDF or a
+    /// photo): only an explicit `import <name>` uses them.
+    pub auto_detect: bool,
 }
 
 /// What a per-object processor is given besides the bytes.
@@ -42,6 +47,8 @@ pub struct RawCtx<'a> {
     pub raw_id: &'a str,
     pub meta: &'a RawMeta,
     pub run_id: &'a str,
+    /// OCR and extraction for documents (`[ocr]`), chosen by the host.
+    pub models: &'a dyn ModelProvider,
 }
 
 /// Runs once per raw object of the listed kinds and per processor version.
@@ -113,6 +120,7 @@ pub static SOURCES: &[&Source] = &[
     &crate::pipeline::feishu_calendar::SOURCE,
     &crate::pipeline::files::SOURCE,
     &crate::sync::SOURCE,
+    &crate::pipeline::report::SOURCE,
 ];
 
 pub fn import_specs() -> impl Iterator<Item = &'static ImportSpec> {

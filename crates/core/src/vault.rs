@@ -20,6 +20,9 @@ pub struct RawMeta {
     pub origin_ref: Option<String>,
     pub received_at: String,
     pub bytes: u64,
+    /// Language hint for documents (`import report --lang`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lang: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -127,6 +130,7 @@ mod tests {
             origin_ref: None,
             received_at: "2026-11-01T00:00:00Z".into(),
             bytes: 5,
+            lang: None,
         }
     }
 

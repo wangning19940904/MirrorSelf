@@ -47,6 +47,7 @@ pub static SOURCE: Source = Source {
         kind: reader::KIND,
         expects: "an Apple Health export: export.zip or export.xml from the Health app",
         detect: detect_export,
+        auto_detect: true,
     }],
     raw: &[RawProcessor {
         processor: PARSE,

@@ -11,6 +11,9 @@ use serde_json::{json, Value};
 use crate::config::{Config, Home};
 use crate::crypto::{random_bytes, VaultKey};
 use crate::error::{conflict, invalid, not_found, UserError};
+use crate::importers::report;
+use crate::models::{self, DocumentInput, ModelProvider, OcrDocument};
+use crate::ops::{self, Edit};
 use crate::pipeline::{self, ProcessReport};
 use crate::query::QueryService;
 use crate::sources::{self, ImportSpec};
@@ -34,6 +37,38 @@ pub struct RawInput {
     pub name: Option<String>,
     /// Where it came from: a file name, or a sync recipe and its window.
     pub origin_ref: Option<String>,
+}
+
+/// A report's language: a hint for OCR (`import report --lang`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Lang {
+    Zh,
+    En,
+}
+
+impl Lang {
+    pub fn parse(s: &str) -> Result<Self> {
+        match s {
+            "zh" | "zh-Hans" | "zh-CN" => Ok(Lang::Zh),
+            "en" | "en-US" | "en-GB" => Ok(Lang::En),
+            other => Err(invalid(format!("language '{other}' must be zh or en"))),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Lang::Zh => "zh",
+            Lang::En => "en",
+        }
+    }
+}
+
+/// A review decision on one extracted lab value.
+#[derive(Debug, Clone)]
+pub enum Decision {
+    Confirm,
+    Edit(Edit),
+    Reject { reason: Option<String> },
 }
 
 #[derive(Debug, Serialize)]
@@ -63,6 +98,8 @@ pub struct App {
     config: Config,
     vault: Vault,
     conn: Connection,
+    /// OCR and lab extraction for checkup reports (`[ocr]`).
+    models: Box<dyn ModelProvider>,
 }
 
 impl App {
@@ -101,13 +138,28 @@ impl App {
         if !home.is_initialized() {
             return Err(UserError::NotInitialized(home.root().to_path_buf()).into());
         }
-        let config = Config::load(&home)?;
+        let mut config = Config::load(&home)?;
+        if config.node_id.is_none() {
+            config.node_id = Some(hex::encode(random_bytes::<4>()));
+            config.save(&home)?;
+        }
+        let models = models::from_config(&config.ocr)?;
         let key_hex = fs::read_to_string(home.key_path())
             .with_context(|| format!("reading {}", home.key_path().display()))?;
         let key = VaultKey::from_hex(&key_hex)?;
         let vault = Vault::new(storage::open(&config.storage)?, &key);
         let conn = db::open(&home.index_path(), vault.subkeys())?;
-        Ok(Self { home, config, vault, conn })
+        Ok(Self { home, config, vault, conn, models })
+    }
+
+    /// Replaces the OCR and extraction provider chosen from the config (an
+    /// embedding host can supply its own, e.g. on-device models).
+    pub fn set_model_provider(&mut self, models: Box<dyn ModelProvider>) {
+        self.models = models;
+    }
+
+    pub fn model_provider(&self) -> &dyn ModelProvider {
+        self.models.as_ref()
     }
 
     pub fn home(&self) -> &Home {
@@ -170,11 +222,23 @@ impl App {
         self.ingest(labelled(spec, mime, name), content, process)
     }
 
+    /// Imports a checkup report (PDF or photo). `lang` is a hint for OCR and
+    /// is kept with the original; `import_bytes("report", …)` is the same
+    /// without the hint.
+    pub fn import_report(&self, name: Option<String>, content: &[u8], lang: Option<Lang>, process: bool) -> Result<ImportReport> {
+        let spec = sources::import_spec(report::IMPORT).expect("the report source is registered");
+        let Some(mime) = (spec.detect)(name.as_deref(), content) else {
+            return Err(invalid(format!("this is not {}", spec.expects)));
+        };
+        self.ingest_with_lang(labelled(spec, mime, name), lang, content, process)
+    }
+
     /// Imports bytes of unknown origin, as an upload does: the first source
     /// that recognises them wins, and anything else is kept as a generic
     /// file (`file_pdf`, `file_image`, `file_text` or `file_other`).
     pub fn import_auto(&self, name: Option<String>, content: &[u8], process: bool) -> Result<ImportReport> {
         let recognised = sources::import_specs()
+            .filter(|spec| spec.auto_detect)
             .find_map(|spec| (spec.detect)(name.as_deref(), content).map(|mime| (spec, mime)));
         let input = match recognised {
             Some((spec, mime)) => labelled(spec, mime, name),
@@ -196,6 +260,10 @@ impl App {
     /// not a user-supplied file, such as a sync response. Nothing checks
     /// that the bytes match the label.
     pub fn ingest(&self, input: RawInput, content: &[u8], process: bool) -> Result<ImportReport> {
+        self.ingest_with_lang(input, None, content, process)
+    }
+
+    fn ingest_with_lang(&self, input: RawInput, lang: Option<Lang>, content: &[u8], process: bool) -> Result<ImportReport> {
         let meta = RawMeta {
             source: input.source,
             kind: input.kind,
@@ -204,6 +272,7 @@ impl App {
             origin_ref: input.origin_ref,
             received_at: now_utc_precise(),
             bytes: content.len() as u64,
+            lang: lang.map(|l| l.as_str().to_string()),
         };
         let put = self.vault.put(&meta, content)?;
         if put.created {
@@ -221,7 +290,48 @@ impl App {
     }
 
     pub fn process(&self, rebuild: bool) -> Result<ProcessReport> {
-        pipeline::process(&self.conn, &self.vault, &self.config, rebuild)
+        pipeline::process(&self.conn, &self.vault, &self.config, self.models.as_ref(), rebuild)
+    }
+
+    /// Runs the configured provider's OCR on a file without importing it
+    /// (`mirrorself dev ocr`, used to record fixtures).
+    pub fn ocr_bytes(&self, content: &[u8], lang: Option<Lang>) -> Result<OcrDocument> {
+        let mime = report::sniff(content).ok_or_else(|| invalid("not a supported report file"))?;
+        self.models.ocr(&DocumentInput { mime, bytes: content, lang: lang.map(Lang::as_str) })
+    }
+
+    /// Records a review decision as a user op (in the vault and the op log)
+    /// and applies it. Returns the updated review item.
+    pub fn review(&self, id: &str, decision: Decision, actor: &str) -> Result<Value> {
+        let row: Option<(String, Option<i64>, Option<String>, String)> = self
+            .conn
+            .query_row(
+                "SELECT raw_id, page, label, status FROM observations
+                 WHERE id = ?1 AND code_system IN ('loinc', 'local')",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+            )
+            .optional()?;
+        let Some((raw_id, page, label, status)) = row else {
+            return Err(not_found(format!("no extracted lab value '{id}' (see `mirrorself review list`)")));
+        };
+        if matches!(status.as_str(), "superseded" | "duplicate") {
+            return Err(conflict(format!("lab value '{id}' is {status} and cannot be reviewed")));
+        }
+        let matcher = json!({ "raw_id": raw_id, "page": page, "label": label });
+        let (op, payload) = match decision {
+            Decision::Confirm => (ops::CONFIRM, json!({ "match": matcher })),
+            Decision::Edit(edit) => {
+                ops::check_edit(&edit).map_err(invalid)?;
+                (ops::EDIT, json!({ "match": matcher, "edit": edit }))
+            }
+            Decision::Reject { reason } => (ops::REJECT, json!({ "match": matcher, "reason": reason })),
+        };
+        let node = self.config.node_id.as_deref().unwrap_or("local");
+        let (op_id, _) = ops::append(&self.conn, &self.vault, node, actor, op, id, payload)?;
+        let mut item = self.query().review_item(id)?;
+        item["op_id"] = json!(op_id);
+        Ok(item)
     }
 
     pub fn raw_list(&self) -> Result<Value> {

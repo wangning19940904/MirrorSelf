@@ -79,6 +79,29 @@ pub struct Config {
     /// Scheduled sync recipes (`[[sync]]`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sync: Vec<Recipe>,
+    /// OCR and extraction for checkup reports (`[ocr]`).
+    #[serde(default, skip_serializing_if = "OcrConfig::is_unset")]
+    pub ocr: OcrConfig,
+    /// Identifies this host in the user op log's hybrid logical clock.
+    #[serde(default)]
+    pub node_id: Option<String>,
+}
+
+/// OCR and extraction for checkup reports (`[ocr]`).
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OcrConfig {
+    /// `apple-vision` (default on macOS), `recorded:<dir>` or `none`.
+    #[serde(default)]
+    pub provider: Option<String>,
+    /// A prebuilt OCR helper binary instead of compiling it on first use.
+    #[serde(default)]
+    pub helper: Option<PathBuf>,
+}
+
+impl OcrConfig {
+    pub fn is_unset(&self) -> bool {
+        self.provider.is_none() && self.helper.is_none()
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,6 +113,9 @@ pub struct PipelineConfig {
     /// |z| at or above this marks a daily value as notable on the timeline.
     #[serde(default = "default_notable_z")]
     pub notable_z: f64,
+    /// Extracted lab values below this confidence go to the review queue.
+    #[serde(default = "default_review_confidence")]
+    pub review_confidence: f64,
 }
 
 impl Default for PipelineConfig {
@@ -97,6 +123,7 @@ impl Default for PipelineConfig {
         Self {
             sleep_day_boundary_hour: default_sleep_boundary(),
             notable_z: default_notable_z(),
+            review_confidence: default_review_confidence(),
         }
     }
 }
@@ -107,6 +134,10 @@ fn default_sleep_boundary() -> u32 {
 
 fn default_notable_z() -> f64 {
     2.0
+}
+
+fn default_review_confidence() -> f64 {
+    0.9
 }
 
 /// Suggested `server.lan_addr` for the phone upload page: all interfaces,
@@ -163,6 +194,8 @@ impl Config {
             server: ServerConfig::default(),
             model: ModelConfig::default(),
             sync: Vec::new(),
+            ocr: OcrConfig::default(),
+            node_id: Some(hex::encode(crate::crypto::random_bytes::<4>())),
         }
     }
 

@@ -61,6 +61,7 @@ pub static SOURCE: Source = Source {
         kind: reader::KIND,
         expects: "Feishu calendar events as printed by `lark-cli calendar events instance_view` (JSON)",
         detect: detect_events,
+        auto_detect: true,
     }],
     raw: &[RawProcessor {
         processor: PARSE,

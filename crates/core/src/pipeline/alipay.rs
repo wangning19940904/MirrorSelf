@@ -54,6 +54,7 @@ pub static SOURCE: Source = Source {
         kind: reader::KIND,
         expects: "an Alipay bill: the CSV from 支付宝 → 我的 → 账单 → 开具交易流水证明 / 导出账单",
         detect: detect_bill,
+        auto_detect: true,
     }],
     raw: &[RawProcessor {
         processor: PARSE,

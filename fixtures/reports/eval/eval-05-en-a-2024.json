@@ -1,0 +1,308 @@
+{
+  "id": "eval-05-en-a-2024",
+  "language": "en",
+  "provider": "Harbor Lab Services (Sample)",
+  "title": "Laboratory Report",
+  "header": [
+    "Patient: Test Patient (synthetic)",
+    "Sex: M",
+    "DOB: 1983-01-01",
+    "Collected: 2024-01-06"
+  ],
+  "columns": [
+    {
+      "key": "name",
+      "label": "Test",
+      "x": 50.0
+    },
+    {
+      "key": "value",
+      "label": "Result",
+      "x": 240.0
+    },
+    {
+      "key": "flag",
+      "label": "Flag",
+      "x": 300.0
+    },
+    {
+      "key": "unit",
+      "label": "Units",
+      "x": 340.0
+    },
+    {
+      "key": "range",
+      "label": "Reference Interval",
+      "x": 440.0
+    }
+  ],
+  "pages": [
+    {
+      "sections": [
+        {
+          "title": "Hematology and Lipids",
+          "rows": [
+            {
+              "name": "WBC Count",
+              "value": "1.5",
+              "flag": "L",
+              "unit": "x10^9/L",
+              "range": "4.0-11.0",
+              "truth": {
+                "loinc": "6690-2",
+                "value": 1.5,
+                "value_text": null,
+                "unit": "10*9/L",
+                "ref_low": 4.0,
+                "ref_high": 11.0,
+                "flag": "L"
+              }
+            },
+            {
+              "name": "Hemoglobin",
+              "value": "151",
+              "unit": "g/L",
+              "range": "130-170",
+              "truth": {
+                "loinc": "718-7",
+                "value": 151.0,
+                "value_text": null,
+                "unit": "g/L",
+                "ref_low": 130.0,
+                "ref_high": 170.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "Platelet Count",
+              "value": "486",
+              "flag": "H",
+              "unit": "x10^9/L",
+              "range": "150-400",
+              "truth": {
+                "loinc": "777-3",
+                "value": 486.0,
+                "value_text": null,
+                "unit": "10*9/L",
+                "ref_low": 150.0,
+                "ref_high": 400.0,
+                "flag": "H"
+              }
+            },
+            {
+              "name": "Cholesterol, total",
+              "value": "6.4",
+              "flag": "H",
+              "unit": "mmol/L",
+              "range": "<5.2",
+              "truth": {
+                "loinc": "2093-3",
+                "value": 6.4,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": null,
+                "ref_high": 5.2,
+                "flag": "H"
+              }
+            },
+            {
+              "name": "LDL Cholesterol",
+              "value": "3.2",
+              "unit": "mmol/L",
+              "range": "<3.4",
+              "truth": {
+                "loinc": "13457-7",
+                "value": 3.2,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": null,
+                "ref_high": 3.4,
+                "flag": null
+              }
+            },
+            {
+              "name": "HDL Cholesterol",
+              "value": "1.1",
+              "unit": "mmol/L",
+              "range": ">1.0",
+              "truth": {
+                "loinc": "2085-9",
+                "value": 1.1,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 1.0,
+                "ref_high": null,
+                "flag": null
+              }
+            },
+            {
+              "name": "Triglycerides",
+              "value": "1.2",
+              "unit": "mmol/L",
+              "range": "<1.7",
+              "truth": {
+                "loinc": "2571-8",
+                "value": 1.2,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": null,
+                "ref_high": 1.7,
+                "flag": null
+              }
+            }
+          ]
+        }
+      ],
+      "notes": []
+    },
+    {
+      "sections": [
+        {
+          "title": "Chemistry",
+          "rows": [
+            {
+              "name": "Glucose, fasting",
+              "value": "3.1",
+              "flag": "L",
+              "unit": "mmol/L",
+              "range": "3.9-6.0",
+              "truth": {
+                "loinc": "1558-6",
+                "value": 3.1,
+                "value_text": null,
+                "unit": "mmol/L",
+                "ref_low": 3.9,
+                "ref_high": 6.0,
+                "flag": "L"
+              }
+            },
+            {
+              "name": "Hemoglobin A1c",
+              "value": "5.4",
+              "unit": "%",
+              "range": "4.0-6.0",
+              "truth": {
+                "loinc": "4548-4",
+                "value": 5.4,
+                "value_text": null,
+                "unit": "%",
+                "ref_low": 4.0,
+                "ref_high": 6.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "ALT",
+              "value": "61",
+              "flag": "H",
+              "unit": "U/L",
+              "range": "7-40",
+              "truth": {
+                "loinc": "1742-6",
+                "value": 61.0,
+                "value_text": null,
+                "unit": "U/L",
+                "ref_low": 7.0,
+                "ref_high": 40.0,
+                "flag": "H"
+              }
+            },
+            {
+              "name": "Creatinine",
+              "value": "100",
+              "unit": "umol/L",
+              "range": "60-110",
+              "truth": {
+                "loinc": "2160-0",
+                "value": 100.0,
+                "value_text": null,
+                "unit": "umol/L",
+                "ref_low": 60.0,
+                "ref_high": 110.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "eGFR",
+              "value": "78",
+              "flag": "L",
+              "unit": "mL/min/1.73m²",
+              "range": ">90",
+              "truth": {
+                "loinc": "62238-1",
+                "value": 78.0,
+                "value_text": null,
+                "unit": "mL/min/{1.73_m2}",
+                "ref_low": 90.0,
+                "ref_high": null,
+                "flag": "L"
+              }
+            },
+            {
+              "name": "TSH",
+              "value": "1.03",
+              "unit": "mIU/L",
+              "range": "0.40-4.00",
+              "truth": {
+                "loinc": "3016-3",
+                "value": 1.03,
+                "value_text": null,
+                "unit": "m[IU]/L",
+                "ref_low": 0.4,
+                "ref_high": 4.0,
+                "flag": null
+              }
+            },
+            {
+              "name": "Free T4",
+              "value": "27.1",
+              "flag": "H",
+              "unit": "pmol/L",
+              "range": "12.0-22.0",
+              "truth": {
+                "loinc": "3024-7",
+                "value": 27.1,
+                "value_text": null,
+                "unit": "pmol/L",
+                "ref_low": 12.0,
+                "ref_high": 22.0,
+                "flag": "H"
+              }
+            },
+            {
+              "name": "Vitamin D, 25-hydroxy",
+              "value": "40",
+              "flag": "L",
+              "unit": "nmol/L",
+              "range": "50-150",
+              "truth": {
+                "loinc": "1989-3",
+                "value": 40.0,
+                "value_text": null,
+                "unit": "nmol/L",
+                "ref_low": 50.0,
+                "ref_high": 150.0,
+                "flag": "L"
+              }
+            }
+          ]
+        }
+      ],
+      "notes": [
+        "Synthetic test data for software testing only."
+      ]
+    }
+  ],
+  "outputs": [
+    "pdf",
+    "scan",
+    "photo"
+  ],
+  "photo": {
+    "angle": -1.0250172640618977,
+    "blur": 0.7257660045772332,
+    "noise": 0.051945904414988496,
+    "perspective": null
+  },
+  "issued_at": "2024-01-06"
+}
