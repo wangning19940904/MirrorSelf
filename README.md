@@ -7,8 +7,9 @@ through a CLI, a REST API and MCP.
 
 This build covers milestones **M0 (foundations)**, **M1 (server, Apple
 Health, CLI, local MCP)** and **M2 (checkup reports)** from *MirrorSelf —
-System Architecture v1*. It runs as a personal server (deployment mode B) on
-macOS or Linux.
+System Architecture v1*, plus the multi-source demo described in
+[docs/demo-plan.md](docs/demo-plan.md). It runs as a personal server
+(deployment mode B) on macOS or Linux.
 
 ## What works
 
@@ -20,6 +21,20 @@ macOS or Linux.
 - **Apple Health import.** `export.zip` or `export.xml`, streamed. Units are
   normalized to UCUM, timestamps are stored as UTC plus the original offset,
   and a watch's and a phone's overlapping samples count once.
+- **Alipay bills.** The CSV that Alipay emails becomes exact transactions
+  and a daily spend metric ([docs/sources/alipay.md](docs/sources/alipay.md)).
+- **Feishu calendar.** `lark-cli` output becomes meetings, the people and
+  rooms in them, and daily meeting time
+  ([docs/sources/feishu.md](docs/sources/feishu.md)).
+- **Files.** PDFs, text, Markdown and photos become items with a title,
+  extracted text, time and location where the file carries them. A
+  vision-capable model is optional; its answers wait for your review
+  ([docs/model.md](docs/model.md)).
+- **Scheduled sync.** Saved recipes pull from MCP servers and command-line
+  tools on a schedule, read-only tools only, and store every response in the
+  vault; a GitHub recipe is included ([docs/sync.md](docs/sync.md)).
+- **Phone upload.** A page for sending files from a phone on the same
+  network, paired with a one-time code ([docs/upload.md](docs/upload.md)).
 - **Derived data.** Daily aggregates, 28-day personal baselines and z-scores,
   sleep sessions, workouts, notable deviations on a timeline, device and
   activity entities with links, and full-text search.
@@ -31,7 +46,7 @@ macOS or Linux.
   were read from. Anything uncertain waits in a review queue; review
   decisions are user ops kept in the vault, so they survive a deleted index.
 - **One query layer, three surfaces.** The CLI (`--json` on every read), REST
-  (`/v1`, bearer token, loopback only) and MCP over stdio (10 read-only tools,
+  (`/v1`, bearer token, loopback only) and MCP over stdio (12 read-only tools,
   the `mirrorself://schema` resource and 2 prompts). Every agent and API call
   is written to the audit log.
 
@@ -69,6 +84,23 @@ Checkup reports (PDF, JPEG, PNG or HEIC; `--lang` is a hint for OCR):
 
 ```bash
 ./target/release/mirrorself labs --analyte LDL-C --compare
+```
+
+Other files go in the same way. Name the source, or let it be detected:
+
+```bash
+./target/release/mirrorself import alipay ~/Downloads/alipay_record.csv
+```
+
+```bash
+./target/release/mirrorself import auto ~/Downloads/checkup.pdf
+```
+
+Meeting time next to sleep, one row per day, through the same SQL surface
+agents use:
+
+```bash
+./target/release/mirrorself sql "SELECT m.date, m.value AS meeting_min, s.value AS sleep_min FROM v_metrics_daily m JOIN v_metrics_daily s ON s.date = m.date AND s.code = 'ms:sleep_asleep_total' AND s.stat = 'sum' WHERE m.code = 'ms:meeting_minutes' AND m.stat = 'sum' ORDER BY m.date"
 ```
 
 To try it without real data, generate a synthetic export (fake, deterministic):
@@ -118,7 +150,11 @@ block is 12500–12599) and exits if the port is taken. Send the token from
 | `GET /v1/review?all&document` | Extracted values waiting for review |
 | `POST /v1/review/{id}` | `{"action": "confirm"}`, `{"action": "edit", "value": 3.5, "unit": "mmol/L", …}` or `{"action": "reject"}` |
 | `GET /v1/entities?q` · `GET /v1/entities/{id}/links` | Entities and linked records |
-| `GET /v1/search?q&from&to&kinds` | Full-text search |
+| `GET /v1/search?q&from&to&kinds` | Search (substring match for Chinese, Japanese and Korean) |
+| `GET /v1/transactions?from&to&direction&counterparty&counted_only` | Transactions with exact totals |
+| `GET /v1/items?from&to&types&status&located_only&include_text` | Files and generic records with metadata |
+| `POST /v1/upload?name=…` | Store one file (raw request body); see docs/upload.md |
+| `GET /upload` | The phone upload page |
 | `POST /v1/query/sql` | Read-only SQL over `v_*` views |
 | `GET /v1/audit` | Access log |
 | `GET /v1/raw/{id}` | The original file |
@@ -134,7 +170,7 @@ Dates accept `YYYY-MM-DD`, `today`, or look-backs such as `90d`, `12w`, `6m`, `1
    photos with Apple Vision (Chinese and English), through a small Swift
    helper (`crates/core/swift/`) that MirrorSelf compiles on first use. Each
    image is read twice, the second time English-only, and a number counts as
-   confirmed when both readings agree. Elsewhere, set `[models] provider` in
+   confirmed when both readings agree. Elsewhere, set `[ocr] provider` in
    `mirrorself.toml` (`recorded:<dir>` replays saved OCR; `none` stores the
    file and reports that it cannot be read yet).
 3. **Extraction** (`report.extract`) fills the lab schema from §5 of the
@@ -168,16 +204,26 @@ with no wrong value skipping the queue. Re-run it with
 
 The iOS app and sync (M3), remote MCP with OAuth 2.1 grants, scopes and
 redaction (M4), device mode (M5), Android and Huawei import (M6), a web
-console for the review queue, LLM extraction providers, cloud storage
-adapters, FHIR and Parquet export, and vector search.
+console for the review queue, LLM extraction providers for lab reports,
+cloud storage adapters, FHIR and Parquet export, and vector search.
+Uploaded files (`import auto`, the phone upload page) become items; a
+checkup report needs `import report` to become lab values.
+
+The multi-source demo has been tested on synthetic data only. Nothing here
+has been run against a real Alipay export, a real GitHub account or a real
+model, and the PDF and EXIF readers are small hand-written parsers that
+handle ordinary files, not every variant.
 
 ## Layout
 
 ```text
-crates/core     schema, vault, storage, importers, pipeline, model providers, QueryService
-crates/server   REST API (axum) and MCP server (stdio)
+crates/core     schema, vault, storage, source registry, importers, pipeline,
+                scheduled sync, model enrichment, OCR model providers, QueryService
+crates/server   REST API (axum), upload page and MCP server (stdio)
 crates/cli      the mirrorself binary
-fixtures/       synthetic Apple Health export and checkup reports used by the tests
+fixtures/       synthetic fixtures used by the tests, one folder per source
+                (checkup reports: fixtures/reports)
+docs/           the demo plan and one guide per source and feature
 tools/          fixture generators (synthetic reports: render.swift, regenerate.sh)
 ```
 

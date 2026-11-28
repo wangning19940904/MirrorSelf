@@ -1,0 +1,235 @@
+{
+  "tools": [
+    {
+      "name": "get_me",
+      "description": "Get details of the authenticated GitHub user.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "annotations": {
+        "title": "Get my user profile",
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "list_commits",
+      "description": "Get list of commits of a branch in a GitHub repository.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "owner",
+          "repo"
+        ],
+        "properties": {
+          "owner": {
+            "type": "string",
+            "description": "Repository owner"
+          },
+          "repo": {
+            "type": "string",
+            "description": "Repository name"
+          },
+          "sha": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "since": {
+            "type": "string"
+          },
+          "until": {
+            "type": "string"
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Page number for pagination (min 1)"
+          },
+          "perPage": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Results per page for pagination (min 1, max 100)"
+          }
+        }
+      },
+      "annotations": {
+        "title": "List commits",
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "search_commits",
+      "description": "Search for commits across GitHub repositories.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "query",
+          "owner"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Commit search query"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "author-date",
+              "committer-date"
+            ]
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Page number for pagination (min 1)"
+          },
+          "perPage": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Results per page for pagination (min 1, max 100)"
+          },
+          "owner": {
+            "type": "string",
+            "description": "Repository owner (now required)"
+          }
+        }
+      },
+      "annotations": {
+        "title": "Search commits",
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "search_pull_requests",
+      "description": "Search for pull requests in GitHub repositories using issues search syntax already scoped to is:pr",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Search query using GitHub pull request search syntax"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "comments",
+              "reactions",
+              "interactions",
+              "created",
+              "updated"
+            ]
+          },
+          "order": {
+            "type": "string",
+            "enum": [
+              "asc",
+              "desc"
+            ]
+          },
+          "page": {
+            "type": "number",
+            "minimum": 1,
+            "description": "Page number for pagination (min 1)"
+          },
+          "perPage": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 100,
+            "description": "Results per page for pagination (min 1, max 100)"
+          }
+        }
+      },
+      "annotations": {
+        "title": "Search pull requests",
+        "readOnlyHint": true
+      }
+    },
+    {
+      "name": "create_pull_request",
+      "description": "Create a new pull request in a GitHub repository.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "owner",
+          "repo",
+          "title",
+          "head",
+          "base"
+        ],
+        "properties": {
+          "owner": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "head": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          }
+        }
+      },
+      "annotations": {
+        "title": "Open new pull request",
+        "readOnlyHint": false
+      }
+    },
+    {
+      "name": "merge_pull_request",
+      "description": "Merge a pull request.",
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "owner",
+          "repo",
+          "pullNumber"
+        ],
+        "properties": {
+          "owner": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "pullNumber": {
+            "type": "number"
+          }
+        }
+      },
+      "annotations": {
+        "title": "Merge pull request"
+      }
+    }
+  ]
+}

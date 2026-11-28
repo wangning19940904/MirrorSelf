@@ -1,7 +1,9 @@
--- MirrorSelf index, schema v2: checkup reports (architecture §5 stage 5b, §6).
+-- MirrorSelf index, schema v7: checkup reports (architecture §5 stage 5b, §6).
 -- Lab results are observations with their source page, box and review
 -- state; documents gain pages and provenance. Every v1 column of the v_*
 -- views keeps its name and position; new columns are appended.
+-- (Written as 0002 before the multi-source migrations 0002-0006 landed;
+-- it touches none of their tables.)
 
 DROP VIEW v_labs;
 DROP VIEW v_documents;
@@ -81,7 +83,7 @@ CREATE VIEW v_labs AS
 SELECT o.id, o.code, c.display, o.value_num, o.value_text, o.unit, o.ref_low, o.ref_high,
        o.flag, o.start_ts AS observed_at, o.local_date, o.document_id, o.raw_id,
        o.confidence, o.status,
-       -- v2
+       -- v7
        o.code_system, c.display_zh, o.label AS analyte_name, o.ref_text,
        CASE WHEN o.value_num IS NULL OR (o.ref_low IS NULL AND o.ref_high IS NULL) THEN NULL
             WHEN o.ref_high IS NOT NULL AND o.value_num > o.ref_high THEN 'above'
@@ -98,7 +100,7 @@ WHERE o.code_system IN ('loinc', 'local') AND o.status IN ('auto', 'confirmed');
 
 CREATE VIEW v_documents AS
 SELECT d.id, d.doc_type, d.issued_at, d.provider_id, d.language, d.pages, d.raw_id,
-       -- v2
+       -- v7
        d.provider_name, d.title, d.ocr_engine,
        (SELECT count(*) FROM observations o
          WHERE o.document_id = d.id AND o.status IN ('auto', 'confirmed')) AS results,

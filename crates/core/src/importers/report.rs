@@ -5,6 +5,8 @@
 
 pub const SOURCE: &str = "report";
 pub const KIND: &str = "checkup_report";
+/// The import name: `mirrorself import report <file>`.
+pub const IMPORT: &str = "report";
 
 /// The MIME type of a supported report file, from its first bytes.
 pub fn sniff(content: &[u8]) -> Option<&'static str> {

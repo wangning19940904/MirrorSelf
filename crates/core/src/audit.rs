@@ -43,7 +43,7 @@ pub fn record(conn: &Connection, entry: &Entry<'_>, result: &Result<Value>) -> R
 
 /// Rough row count of a QueryService result, for the audit log.
 pub fn result_rows(result: &Value) -> i64 {
-    for key in ["items", "points", "results", "rows", "linked", "coverage", "entities"] {
+    for key in ["items", "transactions", "points", "results", "rows", "linked", "coverage", "entities"] {
         if let Some(a) = result.get(key).and_then(Value::as_array) {
             return a.len() as i64;
         }

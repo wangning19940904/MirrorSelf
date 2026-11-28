@@ -1,0 +1,16 @@
+{
+  "id": "chatcmpl-synthetic-1",
+  "object": "chat.completion",
+  "created": 1790000000,
+  "model": "synthetic-vl",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"text\": \"示例咖啡店\\n拿铁 x2\\n合计 CNY 38.00\", \"type\": \"document\", \"subtype\": \"receipt\", \"title\": \"示例咖啡店收据\", \"event_time\": \"2026-10-01T09:12:00+08:00\", \"place\": \"上海市示例路 1 号\", \"confidence\": 0.82}"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

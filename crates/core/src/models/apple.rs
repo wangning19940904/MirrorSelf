@@ -22,7 +22,7 @@ pub struct AppleVision {
 }
 
 impl AppleVision {
-    /// `helper` overrides the compiled-on-demand binary (`[models] helper`).
+    /// `helper` overrides the compiled-on-demand binary (`[ocr] helper`).
     pub fn new(helper: Option<PathBuf>) -> Self {
         Self { helper }
     }
@@ -42,7 +42,7 @@ impl ModelProvider for AppleVision {
 
     fn ocr(&self, input: &DocumentInput<'_>) -> Result<OcrDocument> {
         if !cfg!(target_os = "macos") {
-            bail!("the apple-vision provider needs macOS (set [models] provider to recorded:<dir> elsewhere)");
+            bail!("the apple-vision provider needs macOS (set [ocr] provider to recorded:<dir> elsewhere)");
         }
         let helper = self.helper_path()?;
         let mut cmd = Command::new(&helper);

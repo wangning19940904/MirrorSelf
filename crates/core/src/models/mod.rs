@@ -24,7 +24,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-use crate::config::ModelsConfig;
+use crate::config::OcrConfig;
 use crate::error::invalid;
 
 pub use validate::{validate, Context as ValidateContext, Reason, Validated};
@@ -164,9 +164,9 @@ impl ModelProvider for Unavailable {
     }
 }
 
-/// The provider named in `[models] provider` (default: `apple-vision` on
+/// The provider named in `[ocr] provider` (default: `apple-vision` on
 /// macOS, none elsewhere).
-pub fn from_config(cfg: &ModelsConfig) -> Result<Box<dyn ModelProvider>> {
+pub fn from_config(cfg: &OcrConfig) -> Result<Box<dyn ModelProvider>> {
     let name = cfg.provider.clone().unwrap_or_else(|| {
         if cfg!(target_os = "macos") { "apple-vision" } else { "none" }.to_string()
     });
@@ -174,7 +174,7 @@ pub fn from_config(cfg: &ModelsConfig) -> Result<Box<dyn ModelProvider>> {
         Some(("recorded", dir)) => Ok(Box::new(recorded::Recorded::open(PathBuf::from(dir))?)),
         _ if name == "apple-vision" => Ok(Box::new(apple::AppleVision::new(cfg.helper.clone()))),
         _ if name == "none" => Ok(Box::new(Unavailable(
-            "no OCR provider on this host: set [models] provider in mirrorself.toml \
+            "no OCR provider on this host: set [ocr] provider in mirrorself.toml \
              (apple-vision on macOS, or recorded:<dir> to replay saved OCR)"
                 .into(),
         ))),

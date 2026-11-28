@@ -1,7 +1,7 @@
 //! MCP and REST surfaces over the fixture export.
 
 use mirrorself_core::config::{Config, Home};
-use mirrorself_core::{App, ImportKind, Lang};
+use mirrorself_core::{App, Lang};
 use mirrorself_server::mcp::{handle, Session};
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -13,7 +13,7 @@ fn app_with_fixture() -> (tempfile::TempDir, App) {
     let home = Home::new(dir.path().join("home"));
     App::init(&home, "server", None).unwrap();
     let app = App::open(home).unwrap();
-    app.import_bytes(ImportKind::AppleHealth, Some("export.xml".into()), FIXTURE, true)
+    app.import_bytes("apple-health", Some("export.xml".into()), FIXTURE, true)
         .unwrap();
     (dir, app)
 }
@@ -39,7 +39,7 @@ fn mcp_lifecycle_tools_resources_and_audit() {
 
     let tools = rpc(&app, &mut s, 2, "tools/list", json!({}));
     let tools = tools["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 10);
+    assert_eq!(tools.len(), 12);
     assert!(tools.iter().all(|t| t["inputSchema"]["type"] == "object"));
     assert!(tools.iter().all(|t| t["annotations"]["readOnlyHint"] == true));
 
@@ -158,11 +158,11 @@ fn app_with_report(file: &str) -> (tempfile::TempDir, App) {
     let home = Home::new(dir.path().join("home"));
     App::init(&home, "server", None).unwrap();
     let mut config = Config::load(&home).unwrap();
-    config.models.provider = Some(format!("recorded:{}", reports_dir().display()));
+    config.ocr.provider = Some(format!("recorded:{}", reports_dir().display()));
     config.save(&home).unwrap();
     let app = App::open(home).unwrap();
     let bytes = std::fs::read(reports_dir().join(file)).unwrap();
-    app.import_bytes(ImportKind::Report(Some(Lang::Zh)), Some(file.into()), &bytes, true).unwrap();
+    app.import_report(Some(file.into()), &bytes, Some(Lang::Zh), true).unwrap();
     (dir, app)
 }
 

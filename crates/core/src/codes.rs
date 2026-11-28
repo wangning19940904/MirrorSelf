@@ -85,6 +85,11 @@ pub const METRICS: &[MetricDef] = &[
     m("ms:sleep_asleep_rem", None, "REM sleep", "快速眼动睡眠", "sleep", "min", Sum, false, false),
     m("ms:sleep_awake", None, "Awake during sleep", "睡眠中清醒", "sleep", "min", Sum, false, false),
     m(SLEEP_TOTAL, None, "Total sleep", "总睡眠时长", "sleep", "min", Sum, false, true),
+    // Beyond health (docs/demo-plan.md). A source writes observations with
+    // these codes and gets daily totals, baselines and z-scores for free.
+    m("ms:spend", None, "Spending", "支出", "finance", "CNY", Sum, false, true),
+    m("ms:meeting_minutes", None, "Time in meetings", "会议时长", "work", "min", Sum, false, true),
+    m("ms:meeting_count", None, "Meetings", "会议数", "work", "{meetings}", Sum, false, false),
 ];
 
 /// Sleep stage codes that count as asleep (they add up to [`SLEEP_TOTAL`]).
@@ -127,6 +132,16 @@ pub fn sleep_code(value: &str) -> Option<&'static str> {
         _ => return None,
     })
 }
+
+/// Whether a metric is measured by devices and apps (health data), as
+/// opposed to derived from records such as bills or calendars. Only measured
+/// metrics take part in cross-device de-duplication and device entities.
+pub fn is_measured(def: &MetricDef) -> bool {
+    !RECORD_CATEGORIES.contains(&def.category)
+}
+
+/// Categories whose metrics are derived from records, not measured.
+pub const RECORD_CATEGORIES: &[&str] = &["finance", "work"];
 
 pub fn is_sleep(code: &str) -> bool {
     code.starts_with("ms:sleep_")

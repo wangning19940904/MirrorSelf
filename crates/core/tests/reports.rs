@@ -16,7 +16,7 @@ use mirrorself_core::models::apple;
 use mirrorself_core::ops::Edit;
 use mirrorself_core::query::{LabQuery, ReviewQuery, SearchQuery, UNTRUSTED_CLOSE, UNTRUSTED_OPEN};
 use mirrorself_core::synth_report::ReportSpec;
-use mirrorself_core::{App, Decision, ImportKind, Lang, UserError};
+use mirrorself_core::{App, Decision, Lang, UserError};
 use serde_json::{json, Value};
 
 fn fixtures(set: &str) -> PathBuf {
@@ -29,7 +29,7 @@ fn new_app() -> (tempfile::TempDir, App) {
     App::init(&home, "server", None).unwrap();
     // Replay recorded OCR through the config, as a host without Vision would.
     let mut config = Config::load(&home).unwrap();
-    config.models.provider = Some(format!("recorded:{}", fixtures("acceptance").display()));
+    config.ocr.provider = Some(format!("recorded:{}", fixtures("acceptance").display()));
     config.save(&home).unwrap();
     (dir, App::open(home).unwrap())
 }
@@ -40,7 +40,7 @@ fn spec(id: &str) -> ReportSpec {
 
 fn import(app: &App, file: &str, lang: Lang) -> String {
     let bytes = std::fs::read(fixtures("acceptance").join(file)).unwrap();
-    let report = app.import_bytes(ImportKind::Report(Some(lang)), Some(file.into()), &bytes, true).unwrap();
+    let report = app.import_report(Some(file.into()), &bytes, Some(lang), true).unwrap();
     let errors: Vec<_> = report.process.as_ref().unwrap().errors().collect();
     assert!(errors.is_empty(), "processor errors: {errors:?}");
     mirrorself_core::pipeline::report::document_id(&report.raw_id)
@@ -408,16 +408,19 @@ fn m2_document_text_is_untrusted_and_never_becomes_lab_rows() {
 fn m2_imports_are_idempotent_and_reject_other_files() {
     let (_dir, app) = new_app();
     let bytes = std::fs::read(fixtures("acceptance").join("zh-checkup-2022.pdf")).unwrap();
-    let first = app.import_bytes(ImportKind::Report(Some(Lang::Zh)), Some("a.pdf".into()), &bytes, true).unwrap();
-    let second = app.import_bytes(ImportKind::Report(None), Some("b.pdf".into()), &bytes, true).unwrap();
+    let first = app.import_report(Some("a.pdf".into()), &bytes, Some(Lang::Zh), true).unwrap();
+    let second = app.import_bytes("report", Some("b.pdf".into()), &bytes, true).unwrap();
     assert!(first.created && !second.created);
     assert!(second.process.unwrap().runs.is_empty());
     let (meta, original) = app.raw_original(&first.raw_id).unwrap();
     assert_eq!((meta.kind.as_str(), meta.mime.as_str(), meta.lang.as_deref()), ("checkup_report", "application/pdf", Some("zh")));
     assert_eq!(original, bytes);
 
-    let err = app.import_bytes(ImportKind::Report(None), None, b"<html>not a report</html>", true).unwrap_err();
+    let err = app.import_report(None, b"<html>not a report</html>", None, true).unwrap_err();
     assert!(matches!(user_error(&err), Some(UserError::Invalid(_))));
+    // A PDF of unknown origin is a generic file, never a checkup report.
+    let auto = app.import_auto(Some("other.pdf".into()), b"%PDF-1.7\n% synthetic", false).unwrap();
+    assert_eq!(auto.kind, "file_pdf");
     let err = app.review("lab_nope", Decision::Confirm, "test").unwrap_err();
     assert!(matches!(user_error(&err), Some(UserError::NotFound(_))));
     let id = labs(&app)[0]["id"].as_str().unwrap().to_string();
@@ -433,14 +436,23 @@ fn m2_a_host_without_ocr_stores_the_report_and_reports_why() {
     let home = Home::new(dir.path().join("home"));
     App::init(&home, "server", None).unwrap();
     let mut config = Config::load(&home).unwrap();
-    config.models.provider = Some("none".into());
+    config.ocr.provider = Some("none".into());
     config.save(&home).unwrap();
     let app = App::open(home).unwrap();
     let bytes = std::fs::read(fixtures("acceptance").join("en-lab-2025.pdf")).unwrap();
-    let report = app.import_bytes(ImportKind::Report(Some(Lang::En)), None, &bytes, true).unwrap();
-    let errors: Vec<_> = report.process.as_ref().unwrap().errors().collect();
-    assert_eq!(errors.len(), 1);
-    assert!(errors[0].error.as_deref().unwrap().contains("no OCR provider"));
+    let report = app.import_report(None, &bytes, Some(Lang::En), true).unwrap();
+    let errors: Vec<(&str, &str)> = report
+        .process
+        .as_ref()
+        .unwrap()
+        .errors()
+        .map(|r| (r.processor.as_str(), r.error.as_deref().unwrap()))
+        .collect();
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    assert_eq!(errors[0].0, "report.ocr");
+    assert!(errors[0].1.contains("no OCR provider"), "{errors:?}");
+    assert_eq!(errors[1].0, "report.extract");
+    assert!(errors[1].1.contains("has not been read yet"), "{errors:?}");
     assert_eq!(app.raw_list().unwrap()["count"], 1, "the original is kept for later processing");
 }
 

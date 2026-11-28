@@ -4,6 +4,8 @@
 //! usage or input, 3 not initialized, 4 not found, 5 conflict (e.g. port in
 //! use), 6 denied.
 
+mod cmd_items;
+mod cmd_sync;
 mod render;
 
 use std::net::SocketAddr;
@@ -14,12 +16,12 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use mirrorself_core::config::Home;
 use mirrorself_core::error::{invalid, user_error, UserError};
-use mirrorself_core::config::ModelsConfig;
+use mirrorself_core::config::OcrConfig;
 use mirrorself_core::models::{self, recorded::Recording};
 use mirrorself_core::ops::Edit;
 use mirrorself_core::query::{CompareQuery, LabQuery, Period, ReviewQuery, SearchQuery, SeriesQuery, TimelineQuery};
 use mirrorself_core::synth::{self, SynthOptions};
-use mirrorself_core::{eval, synth_report, App, Decision, ImportKind, Lang};
+use mirrorself_core::{eval, synth_report, App, Decision, Lang};
 use serde_json::{json, Value};
 
 #[derive(Parser)]
@@ -46,8 +48,19 @@ enum Command {
         storage: Option<String>,
     },
     /// Store a file in the vault and process it
-    #[command(subcommand)]
-    Import(ImportCmd),
+    Import {
+        /// What the file is: apple-health (export.zip or export.xml from
+        /// Health → Export All Health Data), another source name, or `auto`
+        /// to detect it
+        source: String,
+        path: PathBuf,
+        /// For `report` (a checkup report, PDF or photo): its language, a hint for OCR
+        #[arg(long, value_parser = ["zh", "en"])]
+        lang: Option<String>,
+        /// Only store it; run `mirrorself process` later
+        #[arg(long)]
+        no_process: bool,
+    },
     /// Run pending processors; --rebuild re-derives everything from the vault
     Process {
         #[arg(long)]
@@ -140,6 +153,12 @@ enum Command {
     /// Raw objects in the vault
     #[command(subcommand)]
     Raw(RawCmd),
+    /// Ingested files and generic records, with their metadata
+    #[command(subcommand)]
+    Items(cmd_items::ItemsCmd),
+    /// Scheduled sync from MCP servers and command-line tools
+    #[command(subcommand)]
+    Sync(cmd_sync::SyncCmd),
     /// MCP server
     #[command(subcommand)]
     Mcp(McpCmd),
@@ -152,27 +171,6 @@ enum Command {
     /// Developer tools
     #[command(subcommand, hide = true)]
     Dev(DevCmd),
-}
-
-#[derive(Subcommand)]
-enum ImportCmd {
-    /// Apple Health export.zip (or export.xml) from Health → Export All Health Data
-    AppleHealth {
-        path: PathBuf,
-        /// Only store it; run `mirrorself process` later
-        #[arg(long)]
-        no_process: bool,
-    },
-    /// A checkup report or lab sheet: PDF or photo (JPEG, PNG, HEIC)
-    Report {
-        path: PathBuf,
-        /// The report's language, a hint for OCR
-        #[arg(long, value_parser = ["zh", "en"])]
-        lang: Option<String>,
-        /// Only store it; run `mirrorself process` later
-        #[arg(long)]
-        no_process: bool,
-    },
 }
 
 #[derive(Subcommand)]
@@ -352,7 +350,7 @@ fn run(cli: Cli) -> Result<()> {
             out(json!({ "dir": dir.display().to_string(), "reports": specs.len() }), render::pretty);
         }
         Command::Dev(DevCmd::Ocr { files, lang, record }) => {
-            let provider = models::from_config(&ModelsConfig::default())?;
+            let provider = models::from_config(&OcrConfig::default())?;
             let lang = lang.as_deref().map(Lang::parse).transpose()?;
             let mut done = Vec::new();
             for path in files {
@@ -372,7 +370,7 @@ fn run(cli: Cli) -> Result<()> {
             out(json!({ "files": done }), render::pretty);
         }
         Command::Dev(DevCmd::EvalReports { dir, live, threshold }) => {
-            let provider = if live { Some(models::from_config(&ModelsConfig::default())?) } else { None };
+            let provider = if live { Some(models::from_config(&OcrConfig::default())?) } else { None };
             let (scores, summary) = eval::run_dir(&dir, provider.as_deref(), threshold)?;
             out(json!({ "summary": summary, "documents": scores }), render::eval);
         }
@@ -396,13 +394,11 @@ fn run(cli: Cli) -> Result<()> {
 fn run_with_app(app: &App, command: Command, out: &dyn Fn(Value, fn(&Value) -> String)) -> Result<()> {
     let q = app.query();
     match command {
-        Command::Import(ImportCmd::AppleHealth { path, no_process }) => {
-            let report = app.import_file(ImportKind::AppleHealth, &path, !no_process)?;
-            out(serde_json::to_value(&report)?, render::import);
-        }
-        Command::Import(ImportCmd::Report { path, lang, no_process }) => {
+        Command::Import { source, path, lang, no_process } if source == mirrorself_core::importers::report::IMPORT => {
             let lang = lang.as_deref().map(Lang::parse).transpose()?;
-            let report = app.import_file(ImportKind::Report(lang), &path, !no_process)?;
+            let content = std::fs::read(&path).with_context(|| format!("reading {}", path.display()))?;
+            let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+            let report = app.import_report(name, &content, lang, !no_process)?;
             let failed: Vec<String> = report
                 .process
                 .iter()
@@ -420,6 +416,15 @@ fn run_with_app(app: &App, command: Command, out: &dyn Fn(Value, fn(&Value) -> S
                 return Err(anyhow::anyhow!("the report was stored but could not be read: {e}"));
             }
         }
+        Command::Import { lang: Some(_), .. } => {
+            return Err(invalid("--lang applies to `import report` only"));
+        }
+        Command::Import { source, path, lang: None, no_process } => {
+            let report = app.import_file(&source, &path, !no_process)?;
+            out(serde_json::to_value(&report)?, render::import);
+        }
+        Command::Items(cmd) => cmd_items::run(app, cmd, out)?,
+        Command::Sync(cmd) => cmd_sync::run(app, cmd, out)?,
         Command::Process { rebuild } => {
             let report = app.process(rebuild)?;
             out(serde_json::to_value(&report)?, render::process);

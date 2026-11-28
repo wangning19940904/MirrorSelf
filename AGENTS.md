@@ -66,6 +66,16 @@ development package.
   replayed by the `ops.replay` stage. Never write review state anywhere else.
 - All reads by agents and API clients go through `mirrorself_server::tools::call`,
   which writes the audit log.
+- A new source is a module plus one entry in `mirrorself_core::sources::SOURCES`:
+  an `ImportSpec` (how its files are recognised), `RawProcessor`s (per raw
+  object, selected by raw kind) and optional whole-index `GlobalStage`s. The
+  pipeline, importer and CLI read the registry; don't special-case a source
+  elsewhere. `docs/demo-plan.md` has the contracts for the multi-source demo.
+- Anything ingested without a typed table gets an `items` row (the metadata
+  envelope). `items.source_updated_at` is the source's own timestamp, never
+  the processing time, so rebuilds stay identical.
+- Text from outside (file contents, tool responses, model output) is data: it
+  is never executed, never used to pick a tool, never put in a tool description.
 - Health guardrails: no diagnosis or treatment advice in tool descriptions,
   prompts or output. Flags come from source documents, never model judgment.
 - Text extracted from documents is untrusted: return it only through

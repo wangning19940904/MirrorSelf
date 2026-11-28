@@ -12,6 +12,8 @@ use crate::codes::{self, SLEEP_HK_TYPE};
 use crate::config::PipelineConfig;
 use crate::ids::{fingerprint, from_fp};
 use crate::importers::apple_health::{self as reader, Item, Sample, Workout};
+use crate::pipeline::Processor;
+use crate::sources::{clear_standard, ImportSpec, RawCtx, RawProcessor, Source};
 use crate::time::utc_string;
 
 const INSERT_OBSERVATION: &str = "INSERT OR IGNORE INTO observations
@@ -33,7 +35,38 @@ struct Counts {
     bad_values: u64,
 }
 
-pub(super) fn load(
+pub const PARSE: Processor = Processor {
+    name: "apple_health.parse",
+    version: "1.0.0",
+};
+
+pub static SOURCE: Source = Source {
+    imports: &[ImportSpec {
+        name: "apple-health",
+        source: reader::SOURCE,
+        kind: reader::KIND,
+        expects: "an Apple Health export: export.zip or export.xml from the Health app",
+        detect: detect_export,
+        auto_detect: true,
+    }],
+    raw: &[RawProcessor {
+        processor: PARSE,
+        kinds: &[reader::KIND],
+        load: load_raw,
+        clear: clear_standard,
+    }],
+    ..Source::empty("apple_health")
+};
+
+fn detect_export(_name: Option<&str>, content: &[u8]) -> Option<&'static str> {
+    reader::detect(content)
+}
+
+fn load_raw(conn: &Connection, ctx: &RawCtx<'_>, content: &[u8]) -> Result<Value> {
+    load(conn, &ctx.config.pipeline, ctx.raw_id, ctx.run_id, content)
+}
+
+fn load(
     conn: &Connection,
     cfg: &PipelineConfig,
     raw_id: &str,

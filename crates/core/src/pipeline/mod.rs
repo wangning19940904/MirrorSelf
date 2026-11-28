@@ -1,15 +1,20 @@
 //! Processing pipeline (architecture §5): raw vault → parse → normalize →
 //! derive → link → index.
 //!
-//! Per-object processors run once per raw object and processor version, as
-//! a chain per kind (a checkup report is OCR'd, then extracted). Whole-index
-//! stages (dedupe, op replay, daily metrics, sleep sessions, links, search)
+//! Per-object processors run once per raw object and processor version.
+//! Whole-index stages (dedupe, daily metrics, sleep sessions, links, search)
 //! run after any per-object output changes. Every run is recorded in
 //! `processor_runs`, so each output can be traced to the code that made it.
+//!
+//! Which processors and stages exist comes from [`crate::sources::SOURCES`];
+//! this module only schedules them.
 
-mod apple_health;
+pub(crate) mod alipay;
+pub(crate) mod apple_health;
 mod dedupe;
 mod derive;
+pub(crate) mod feishu_calendar;
+pub(crate) mod files;
 mod link;
 pub mod report;
 mod sleep;
@@ -22,11 +27,11 @@ use rusqlite::{params, Connection};
 use serde::Serialize;
 use serde_json::Value;
 
-use crate::config::PipelineConfig;
+use crate::config::Config;
 use crate::ids::stable_id;
-use crate::importers;
 use crate::models::ModelProvider;
 use crate::ops;
+use crate::sources::{GlobalCtx, GlobalStage, RawCtx, RawProcessor, SOURCES};
 use crate::time::now_utc_string;
 use crate::vault::{RawMeta, Vault};
 
@@ -36,39 +41,61 @@ pub struct Processor {
     pub version: &'static str,
 }
 
-pub const APPLE_HEALTH_PARSE: Processor = Processor {
-    name: "apple_health.parse",
-    version: "1.0.0",
+static DEDUPE: GlobalStage = GlobalStage {
+    processor: Processor { name: "normalize.dedupe", version: "1.1.0" },
+    run: run_dedupe,
+};
+static DAILY_METRICS: GlobalStage = GlobalStage {
+    processor: Processor { name: "derive.daily_metrics", version: "1.0.0" },
+    run: run_daily_metrics,
+};
+static SLEEP_SESSIONS: GlobalStage = GlobalStage {
+    processor: Processor { name: "derive.sleep_sessions", version: "1.0.0" },
+    run: run_sleep_sessions,
+};
+static LINK_RULES: GlobalStage = GlobalStage {
+    processor: Processor { name: "link.rules", version: "1.1.0" },
+    run: run_link_rules,
+};
+static INDEX_SEARCH: GlobalStage = GlobalStage {
+    processor: Processor { name: "index.search", version: "1.1.0" },
+    run: run_index_search,
 };
 
-pub const REPORT_OCR: Processor = Processor {
-    name: "report.ocr",
-    version: "1.0.0",
-};
+fn run_dedupe(conn: &Connection, _ctx: &GlobalCtx<'_>) -> Result<Value> {
+    dedupe::run(conn)
+}
 
-pub const REPORT_EXTRACT: Processor = Processor {
-    name: "report.extract",
-    version: "1.0.0",
-};
+fn run_daily_metrics(conn: &Connection, ctx: &GlobalCtx<'_>) -> Result<Value> {
+    derive::run(conn, &ctx.config.pipeline)
+}
 
-pub const GLOBAL_STAGES: &[Processor] = &[
-    Processor { name: "normalize.dedupe", version: "1.0.0" },
-    Processor { name: "ops.replay", version: "1.0.0" },
-    Processor { name: "derive.daily_metrics", version: "1.0.0" },
-    Processor { name: "derive.sleep_sessions", version: "1.0.0" },
-    // 1.1.0: providers from checkup reports.
-    Processor { name: "link.rules", version: "1.1.0" },
-    // 1.1.0: documents and lab analytes.
-    Processor { name: "index.search", version: "1.1.0" },
-];
+fn run_sleep_sessions(conn: &Connection, ctx: &GlobalCtx<'_>) -> Result<Value> {
+    sleep::run(conn, ctx.run_id)
+}
 
-/// The per-object processors for a kind, in order.
-fn chain_for(kind: &str) -> &'static [Processor] {
-    match kind {
-        importers::apple_health::KIND => &[APPLE_HEALTH_PARSE],
-        importers::report::KIND => &[REPORT_OCR, REPORT_EXTRACT],
-        _ => &[],
-    }
+fn run_link_rules(conn: &Connection, _ctx: &GlobalCtx<'_>) -> Result<Value> {
+    link::run(conn)
+}
+
+fn run_index_search(conn: &Connection, _ctx: &GlobalCtx<'_>) -> Result<Value> {
+    link::index_search(conn)
+}
+
+/// Whole-index stages in the order they run: the built-in ones with each
+/// source's additions slotted in around them.
+fn global_stages() -> Vec<&'static GlobalStage> {
+    let mut stages = vec![&DEDUPE];
+    stages.extend(SOURCES.iter().flat_map(|s| s.pre_derive.iter()));
+    stages.extend([&DAILY_METRICS, &SLEEP_SESSIONS, &LINK_RULES]);
+    stages.extend(SOURCES.iter().flat_map(|s| s.post_link.iter()));
+    stages.push(&INDEX_SEARCH);
+    stages.extend(SOURCES.iter().flat_map(|s| s.post_index.iter()));
+    stages
+}
+
+fn raw_processors() -> impl Iterator<Item = &'static RawProcessor> {
+    SOURCES.iter().flat_map(|s| s.raw.iter())
 }
 
 pub fn run_id(p: &Processor, raw_id: Option<&str>) -> String {
@@ -104,7 +131,7 @@ pub struct RunReport {
 pub fn process(
     conn: &Connection,
     vault: &Vault,
-    cfg: &PipelineConfig,
+    config: &Config,
     models: &dyn ModelProvider,
     rebuild: bool,
 ) -> Result<ProcessReport> {
@@ -120,17 +147,10 @@ pub fn process(
 
     let pending = pending_raw(conn)?;
     for raw in &pending {
-        for p in &chain_for(&raw.kind)[raw.from..] {
-            let run = run_stage(conn, vault, cfg, models, raw, p)?;
-            let ok = run.status == "ok";
-            report.runs.push(run);
-            if !ok {
-                break;
-            }
-        }
+        report.runs.push(run_raw(conn, vault, config, models, raw)?);
     }
     if rebuild || !pending.is_empty() || global_stale(conn)? {
-        report.runs.extend(run_global(conn, cfg)?);
+        report.runs.extend(run_global(conn, vault, config)?);
     }
     report.elapsed_ms = started.elapsed().as_millis();
     Ok(report)
@@ -159,8 +179,8 @@ pub(crate) fn insert_raw(conn: &Connection, vault: &Vault, id: &str, meta: &RawM
 }
 
 /// Re-registers vault objects the index doesn't know, e.g. after `index.db`
-/// was deleted or the vault was synced from another host. User ops go back
-/// into the op log; everything else is a raw object.
+/// was deleted or the vault was synced from another host. Lab review ops
+/// (`user_op`) go back into the op log; everything else is a raw object.
 fn register_vault_objects(conn: &Connection, vault: &Vault) -> Result<usize> {
     let known: HashSet<String> = conn
         .prepare("SELECT id FROM raw_objects UNION ALL SELECT id FROM ops_log")?
@@ -185,113 +205,83 @@ fn register_vault_objects(conn: &Connection, vault: &Vault) -> Result<usize> {
 /// Removes everything derived from the vault. Keeps raw_objects, ops_log,
 /// grants, audit_log and user-made links.
 fn clear_derived(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        "BEGIN;
-         DELETE FROM observations;
+    let tx = conn.unchecked_transaction()?;
+    tx.execute_batch(
+        "DELETE FROM observations;
          DELETE FROM events;
          DELETE FROM documents;
-         DELETE FROM document_pages;
+         DELETE FROM items;
          DELETE FROM links WHERE method != 'user';
          DELETE FROM entities;
          DELETE FROM episodes;
          DELETE FROM daily_metrics;
          DELETE FROM search_fts;
-         DELETE FROM processor_runs;
-         COMMIT;",
+         DELETE FROM processor_runs;",
     )?;
+    for table in SOURCES.iter().flat_map(|s| s.derived_tables.iter()) {
+        // Table names come from the source registry, never from input.
+        tx.execute_batch(&format!("DELETE FROM \"{table}\";"))?;
+    }
+    tx.commit()?;
     Ok(())
 }
 
 struct PendingRaw {
     id: String,
-    kind: String,
-    /// The first processor of the kind's chain that has to run.
-    from: usize,
+    processor: &'static RawProcessor,
 }
 
+/// Raw objects each processor has not yet handled at its current version,
+/// processor by processor in registry order, so a later processor can rely
+/// on an earlier one's output for the same object.
 fn pending_raw(conn: &Connection) -> Result<Vec<PendingRaw>> {
-    let kinds: Vec<String> = conn
-        .prepare("SELECT DISTINCT kind FROM raw_objects ORDER BY kind")?
-        .query_map([], |r| r.get(0))?
-        .collect::<rusqlite::Result<_>>()?;
     let mut out = Vec::new();
-    for kind in kinds {
-        let chain = chain_for(&kind);
-        for p in chain {
-            // A new processor version reprocesses every object of its kind
-            // from scratch, in import order, so ownership of shared records
-            // stays stable.
-            let stale: i64 = conn.query_row(
-                "SELECT count(*) FROM processor_runs WHERE processor = ?1 AND version != ?2",
-                params![p.name, p.version],
-                |r| r.get(0),
-            )?;
-            if stale > 0 {
-                clear_parser_outputs(conn, p)?;
-            }
+    for p in raw_processors() {
+        if p.kinds.is_empty() {
+            continue;
         }
-        let ids: Vec<String> = conn
-            .prepare("SELECT id FROM raw_objects WHERE kind = ?1 ORDER BY received_at, id")?
-            .query_map([&kind], |r| r.get(0))?
-            .collect::<rusqlite::Result<_>>()?;
-        let mut done = conn.prepare_cached(
-            "SELECT count(*) FROM processor_runs
-             WHERE raw_id = ?1 AND processor = ?2 AND version = ?3 AND status = 'ok'",
+        let name = p.processor.name;
+        let version = p.processor.version;
+        // A new processor version reprocesses every object of its kinds from
+        // scratch, in import order, so ownership of shared records stays stable.
+        let stale: i64 = conn.query_row(
+            "SELECT count(*) FROM processor_runs WHERE processor = ?1 AND version != ?2",
+            params![name, version],
+            |r| r.get(0),
         )?;
-        for id in ids {
-            let mut from = None;
-            for (i, p) in chain.iter().enumerate() {
-                let ok: i64 = done.query_row(params![id, p.name, p.version], |r| r.get(0))?;
-                if ok == 0 {
-                    from = Some(i);
-                    break;
-                }
-            }
-            if let Some(from) = from {
-                out.push(PendingRaw { id, kind: kind.clone(), from });
-            }
+        if stale > 0 {
+            clear_processor_outputs(conn, p)?;
         }
+        let mut stmt = conn.prepare(
+            "SELECT r.id FROM raw_objects r
+             WHERE r.kind IN (SELECT value FROM json_each(?1)) AND NOT EXISTS (
+               SELECT 1 FROM processor_runs pr
+               WHERE pr.raw_id = r.id AND pr.processor = ?2 AND pr.version = ?3 AND pr.status = 'ok')
+             ORDER BY r.received_at, r.id",
+        )?;
+        let ids = stmt
+            .query_map(params![serde_json::to_string(p.kinds)?, name, version], |r| {
+                r.get::<_, String>(0)
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        out.extend(ids.into_iter().map(|id| PendingRaw { id, processor: p }));
     }
     Ok(out)
 }
 
-fn clear_parser_outputs(conn: &Connection, p: &Processor) -> Result<()> {
+fn clear_processor_outputs(conn: &Connection, p: &RawProcessor) -> Result<()> {
     let tx = conn.unchecked_transaction()?;
-    tx.execute(
-        "DELETE FROM observations WHERE run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
-        [p.name],
-    )?;
-    tx.execute(
-        "DELETE FROM events WHERE derived = 0 AND run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
-        [p.name],
-    )?;
-    tx.execute(
-        "DELETE FROM document_pages WHERE run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
-        [p.name],
-    )?;
-    tx.execute(
-        "DELETE FROM documents WHERE run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
-        [p.name],
-    )?;
-    tx.execute("DELETE FROM processor_runs WHERE processor = ?1", [p.name])?;
+    (p.clear)(&tx, p.processor.name)?;
+    tx.execute("DELETE FROM processor_runs WHERE processor = ?1", [p.processor.name])?;
     tx.commit()?;
     Ok(())
 }
 
-/// Removes what an earlier run of `run` (same processor, version and raw
-/// object) wrote, so re-running after an upstream change starts clean.
-fn clear_run_outputs(conn: &Connection, run: &str) -> Result<()> {
-    conn.execute("DELETE FROM observations WHERE run_id = ?1", [run])?;
-    conn.execute("DELETE FROM events WHERE derived = 0 AND run_id = ?1", [run])?;
-    conn.execute("DELETE FROM document_pages WHERE run_id = ?1", [run])?;
-    Ok(())
-}
-
 fn global_stale(conn: &Connection) -> Result<bool> {
-    for p in GLOBAL_STAGES {
+    for stage in global_stages() {
         let ok: i64 = conn.query_row(
             "SELECT count(*) FROM processor_runs WHERE id = ?1 AND status = 'ok'",
-            [run_id(p, None)],
+            [run_id(&stage.processor, None)],
             |r| r.get(0),
         )?;
         if ok == 0 {
@@ -331,37 +321,30 @@ fn record_run(
     Ok(())
 }
 
-fn run_stage(
+fn run_raw(
     conn: &Connection,
     vault: &Vault,
-    cfg: &PipelineConfig,
+    config: &Config,
     models: &dyn ModelProvider,
     raw: &PendingRaw,
-    p: &Processor,
 ) -> Result<RunReport> {
+    let p = &raw.processor.processor;
     let run = run_id(p, Some(&raw.id));
     let started_at = now_utc_string();
     let timer = Instant::now();
 
     let result = (|| -> Result<Value> {
+        let (meta, content) = vault.get(&raw.id)?;
         let tx = conn.unchecked_transaction()?;
-        clear_run_outputs(&tx, &run)?;
-        let outputs = match p.name {
-            "apple_health.parse" => {
-                let (_, content) = vault.get(&raw.id)?;
-                apple_health::load(&tx, cfg, &raw.id, &run, &content)?
-            }
-            "report.ocr" => {
-                let (meta, content) = vault.get(&raw.id)?;
-                report::ocr(&tx, models, &raw.id, &run, &meta, &content)?
-            }
-            "report.extract" => {
-                let received_at: String =
-                    tx.query_row("SELECT received_at FROM raw_objects WHERE id = ?1", [&raw.id], |r| r.get(0))?;
-                report::extract(&tx, models, cfg, &raw.id, &run, &received_at)?
-            }
-            other => unreachable!("no processor named {other}"),
+        let ctx = RawCtx {
+            config,
+            vault,
+            raw_id: &raw.id,
+            meta: &meta,
+            run_id: &run,
+            models,
         };
+        let outputs = (raw.processor.load)(&tx, &ctx, &content)?;
         record_run(&tx, &run, p, Some(&raw.id), "ok", &started_at, Some(&outputs), None)?;
         tx.commit()?;
         Ok(outputs)
@@ -386,22 +369,20 @@ fn run_stage(
     })
 }
 
-fn run_global(conn: &Connection, cfg: &PipelineConfig) -> Result<Vec<RunReport>> {
+fn run_global(conn: &Connection, vault: &Vault, config: &Config) -> Result<Vec<RunReport>> {
     let mut reports = Vec::new();
-    for p in GLOBAL_STAGES {
+    for stage in global_stages() {
+        let p = &stage.processor;
         let run = run_id(p, None);
         let started_at = now_utc_string();
         let timer = Instant::now();
         let tx = conn.unchecked_transaction()?;
-        let outputs = match p.name {
-            "normalize.dedupe" => dedupe::run(&tx)?,
-            "ops.replay" => ops::replay(&tx)?,
-            "derive.daily_metrics" => derive::run(&tx, cfg)?,
-            "derive.sleep_sessions" => sleep::run(&tx, &run)?,
-            "link.rules" => link::run(&tx)?,
-            "index.search" => link::index_search(&tx)?,
-            other => unreachable!("no stage named {other}"),
+        let ctx = GlobalCtx {
+            config,
+            vault,
+            run_id: &run,
         };
+        let outputs = (stage.run)(&tx, &ctx)?;
         record_run(&tx, &run, p, None, "ok", &started_at, Some(&outputs), None)?;
         tx.commit()?;
         reports.push(RunReport {

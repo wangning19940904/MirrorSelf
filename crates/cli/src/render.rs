@@ -4,6 +4,10 @@ use std::fmt::Write;
 
 use serde_json::Value;
 
+/// How a command hands back its result: the JSON value, plus the function
+/// that renders it for a terminal when `--json` is off.
+pub type Out<'a> = &'a dyn Fn(Value, fn(&Value) -> String);
+
 fn s(v: &Value) -> String {
     match v {
         Value::Null => "–".into(),

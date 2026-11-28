@@ -23,6 +23,10 @@ pub const CONFIRM: &str = "review.confirm";
 pub const EDIT: &str = "review.edit";
 pub const REJECT: &str = "review.reject";
 
+/// Lab review ops in `ops_log`. Other ops share the table (uploaded files'
+/// `item.*` decisions, with their own clock format) and are left alone.
+const LAB_OPS: &str = "op IN ('review.confirm', 'review.edit', 'review.reject')";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Op {
     /// `<unix ms, 13 digits>-<counter, 4 digits>-<node id>`: sorts in causal order.
@@ -82,7 +86,7 @@ impl Edit {
 }
 
 fn next_hlc(conn: &Connection, node: &str) -> Result<String> {
-    let last: Option<String> = conn.query_row("SELECT max(hlc) FROM ops_log", [], |r| r.get(0))?;
+    let last: Option<String> = conn.query_row(&format!("SELECT max(hlc) FROM ops_log WHERE {LAB_OPS}"), [], |r| r.get(0))?;
     let now = chrono::Utc::now().timestamp_millis().max(0) as u64;
     let (ms, counter) = match last.as_deref().and_then(parse_hlc) {
         Some((last_ms, last_counter)) if last_ms >= now => (last_ms, last_counter + 1),
@@ -252,7 +256,7 @@ fn apply_edit(conn: &Connection, id: &str, e: &Edit) -> Result<()> {
 /// Re-applies every op in clock order: the `ops.replay` stage.
 pub fn replay(conn: &Connection) -> Result<Value> {
     let ops: Vec<(String, Op)> = conn
-        .prepare("SELECT id, hlc, actor, op, target, payload FROM ops_log ORDER BY hlc, id")?
+        .prepare(&format!("SELECT id, hlc, actor, op, target, payload FROM ops_log WHERE {LAB_OPS} ORDER BY hlc, id"))?
         .query_map([], |r| {
             let payload: String = r.get(5)?;
             Ok((

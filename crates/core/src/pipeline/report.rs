@@ -1,23 +1,134 @@
 //! Checkup reports (architecture §5 stage 5b): OCR, then extraction into lab
 //! observations that link to their page, plus a checkup on the timeline.
 //!
-//! `report.ocr` stores each page's OCR output in `document_pages`, so a new
-//! extractor version re-reads it without running OCR again. `report.extract`
-//! fills the document's metadata and its lab rows; values that fail a check
-//! (`models::validate`) wait in the review queue as `pending`.
+//! - `report.ocr` stores each page's OCR output in `document_pages`, so a
+//!   new extractor version re-reads it without running OCR again.
+//! - `report.extract` fills the document's metadata and its lab rows; values
+//!   that fail a check (`models::validate`) wait in the review queue as
+//!   `pending`.
+//! - `ops.replay` (before daily metrics) re-applies the user's review
+//!   decisions; `report.providers` (after links) links checkups to the
+//!   provider named on the report; `report.index` (after the search index)
+//!   adds documents and lab analytes to search.
+//!
+//! Reports are imported explicitly (`import report`): a PDF or a photo
+//! cannot prove it is a checkup report, so uploads never land here.
 
 use std::collections::{BTreeMap, HashMap};
 
 use anyhow::{Context, Result};
 use chrono::NaiveDate;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde_json::{json, Value};
 
 use crate::config::PipelineConfig;
 use crate::ids::{fingerprint, from_fp, stable_id};
+use crate::importers::report as files;
 use crate::labs;
 use crate::models::{self, DocumentInput, ModelProvider, OcrDocument, OcrPage, ValidateContext};
+use crate::ops;
+use crate::pipeline::Processor;
+use crate::sources::{
+    add_rule_link, clear_standard, upsert_entity, GlobalCtx, GlobalStage, ImportSpec, RawCtx, RawProcessor, Source,
+};
 use crate::vault::RawMeta;
+
+pub const OCR: Processor = Processor { name: "report.ocr", version: "1.0.0" };
+pub const EXTRACT: Processor = Processor { name: "report.extract", version: "1.0.0" };
+
+pub static SOURCE: Source = Source {
+    imports: &[ImportSpec {
+        name: files::IMPORT,
+        source: files::SOURCE,
+        kind: files::KIND,
+        expects: "a checkup report or lab sheet: a PDF or a photo (JPEG, PNG, HEIC or TIFF)",
+        detect,
+        auto_detect: false,
+    }],
+    raw: &[
+        RawProcessor { processor: OCR, kinds: &[files::KIND], load: load_ocr, clear: clear_ocr },
+        RawProcessor { processor: EXTRACT, kinds: &[files::KIND], load: load_extract, clear: clear_standard },
+    ],
+    pre_derive: &[GlobalStage {
+        processor: Processor { name: "ops.replay", version: "1.0.0" },
+        run: replay_ops,
+    }],
+    post_link: &[GlobalStage {
+        processor: Processor { name: "report.providers", version: "1.0.0" },
+        run: link_providers,
+    }],
+    post_index: &[GlobalStage {
+        processor: Processor { name: "report.index", version: "1.0.0" },
+        run: index_documents,
+    }],
+    derived_tables: &["document_pages"],
+    ..Source::empty("report")
+};
+
+fn detect(_name: Option<&str>, content: &[u8]) -> Option<&'static str> {
+    files::sniff(content)
+}
+
+fn load_ocr(conn: &Connection, ctx: &RawCtx<'_>, content: &[u8]) -> Result<Value> {
+    ocr(conn, ctx.models, ctx.raw_id, ctx.run_id, ctx.meta, content)
+}
+
+fn load_extract(conn: &Connection, ctx: &RawCtx<'_>, _content: &[u8]) -> Result<Value> {
+    extract(conn, ctx.models, &ctx.config.pipeline, ctx.raw_id, ctx.run_id, &ctx.meta.received_at)
+}
+
+/// A new OCR version also re-runs extraction, which reads OCR's output.
+fn clear_ocr(conn: &Connection, processor: &str) -> Result<()> {
+    clear_standard(conn, processor)?;
+    for sql in [
+        "DELETE FROM document_pages WHERE run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
+        "DELETE FROM documents WHERE run_id IN (SELECT id FROM processor_runs WHERE processor = ?1)",
+    ] {
+        conn.execute(sql, [processor])?;
+    }
+    clear_standard(conn, EXTRACT.name)?;
+    conn.execute("DELETE FROM processor_runs WHERE processor = ?1", [EXTRACT.name])?;
+    Ok(())
+}
+
+fn replay_ops(conn: &Connection, _ctx: &GlobalCtx<'_>) -> Result<Value> {
+    ops::replay(conn)
+}
+
+/// Checkups link to the provider named on the report.
+fn link_providers(conn: &Connection, _ctx: &GlobalCtx<'_>) -> Result<Value> {
+    let checkups: Vec<(String, String)> = conn
+        .prepare(
+            "SELECT id, json_extract(data, '$.provider') FROM events
+             WHERE type = 'checkup' AND json_extract(data, '$.provider') IS NOT NULL ORDER BY start_ts, id",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut links = 0u64;
+    for (event, provider) in &checkups {
+        let entity = upsert_entity(conn, "provider", provider)?;
+        links += u64::from(add_rule_link(conn, "event", event, &entity, "occurred_at")?);
+    }
+    Ok(json!({ "checkups": checkups.len(), "links": links }))
+}
+
+/// Documents (their untrusted text included) and lab analytes in search.
+fn index_documents(conn: &Connection, _ctx: &GlobalCtx<'_>) -> Result<Value> {
+    conn.execute_batch(
+        "DELETE FROM search_fts WHERE kind = 'metric' AND ref_id IN (SELECT code FROM codes WHERE code_system = 'loinc');
+         INSERT INTO search_fts (kind, ref_id, local_date, title, body)
+           SELECT 'analyte', code, NULL, display, code || ' ' || coalesce(display_zh, '') || ' ' || category_id
+           FROM codes WHERE code_system = 'loinc';
+         INSERT INTO search_fts (kind, ref_id, local_date, title, body)
+           SELECT 'document', d.id, d.issued_at, coalesce(d.title, 'Document'),
+                  coalesce(d.provider_name, '') || ' ' ||
+                  coalesce((SELECT group_concat(o.label, ' ') FROM observations o WHERE o.document_id = d.id), '') || ' ' ||
+                  coalesce(d.text, '')
+           FROM documents d;",
+    )?;
+    let documents: i64 = conn.query_row("SELECT count(*) FROM search_fts WHERE kind = 'document'", [], |r| r.get(0))?;
+    Ok(json!({ "documents": documents }))
+}
 
 pub const DOC_TYPE: &str = "checkup_report";
 
@@ -32,7 +143,7 @@ pub fn provider_entity_id(name: &str) -> String {
 /// Longest provider name kept from a report (it is untrusted document text).
 const MAX_PROVIDER: usize = 60;
 
-pub(super) fn ocr(
+fn ocr(
     conn: &Connection,
     models: &dyn ModelProvider,
     raw_id: &str,
@@ -89,12 +200,16 @@ pub(super) fn ocr(
     }))
 }
 
-fn load_ocr(conn: &Connection, document_id: &str) -> Result<(OcrDocument, Option<String>)> {
-    let (engine, lang): (Option<String>, Option<String>) = conn.query_row(
-        "SELECT ocr_engine, language FROM documents WHERE id = ?1",
-        [document_id],
-        |r| Ok((r.get(0)?, r.get(1)?)),
-    )?;
+/// The OCR output `report.ocr` stored for a document.
+fn stored_ocr(conn: &Connection, document_id: &str) -> Result<(OcrDocument, Option<String>)> {
+    let (engine, lang): (Option<String>, Option<String>) = conn
+        .query_row(
+            "SELECT ocr_engine, language FROM documents WHERE id = ?1",
+            [document_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?
+        .context("the report has not been read yet: report.ocr failed or has not run")?;
     let pages: Vec<OcrPage> = conn
         .prepare("SELECT ocr FROM document_pages WHERE document_id = ?1 ORDER BY page")?
         .query_map([document_id], |r| r.get::<_, String>(0))?
@@ -111,8 +226,7 @@ const INSERT_LAB: &str = "INSERT OR IGNORE INTO observations
   VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8, 0, ?9, ?10, 2, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
           ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26)";
 
-#[allow(clippy::too_many_arguments)]
-pub(super) fn extract(
+fn extract(
     conn: &Connection,
     models: &dyn ModelProvider,
     cfg: &PipelineConfig,
@@ -121,7 +235,7 @@ pub(super) fn extract(
     received_at: &str,
 ) -> Result<Value> {
     let doc_id = document_id(raw_id);
-    let (ocr, lang) = load_ocr(conn, &doc_id)?;
+    let (ocr, lang) = stored_ocr(conn, &doc_id)?;
     let x = models.extract(&ocr, lang.as_deref()).context("extraction")?;
 
     let issued = x
@@ -186,7 +300,7 @@ pub(super) fn extract(
             v.unit,
             start_ts,
             date,
-            provider,
+            Option::<String>::None,
             r.ref_low,
             r.ref_high,
             r.flag_as_printed,
