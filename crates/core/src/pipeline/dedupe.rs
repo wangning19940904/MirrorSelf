@@ -27,7 +27,7 @@ pub(super) fn run(conn: &Connection) -> Result<Value> {
 
     let mut groups: Vec<Vec<&str>> = METRICS
         .iter()
-        .filter(|d| d.agg == Agg::Sum && !codes::is_sleep(d.code))
+        .filter(|d| d.agg == Agg::Sum && !codes::is_sleep(d.code) && codes::is_measured(d))
         .map(|d| vec![d.code])
         .collect();
     groups.push(

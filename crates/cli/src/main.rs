@@ -4,6 +4,8 @@
 //! usage or input, 3 not initialized, 4 not found, 5 conflict (e.g. port in
 //! use), 6 denied.
 
+mod cmd_items;
+mod cmd_sync;
 mod render;
 
 use std::net::SocketAddr;
@@ -16,7 +18,7 @@ use mirrorself_core::config::Home;
 use mirrorself_core::error::{invalid, user_error, UserError};
 use mirrorself_core::query::{CompareQuery, LabQuery, Period, SearchQuery, SeriesQuery, TimelineQuery};
 use mirrorself_core::synth::{self, SynthOptions};
-use mirrorself_core::{App, ImportKind};
+use mirrorself_core::App;
 use serde_json::{json, Value};
 
 #[derive(Parser)]
@@ -43,8 +45,16 @@ enum Command {
         storage: Option<String>,
     },
     /// Store a file in the vault and process it
-    #[command(subcommand)]
-    Import(ImportCmd),
+    Import {
+        /// What the file is: apple-health (export.zip or export.xml from
+        /// Health → Export All Health Data), another source name, or `auto`
+        /// to detect it
+        source: String,
+        path: PathBuf,
+        /// Only store it; run `mirrorself process` later
+        #[arg(long)]
+        no_process: bool,
+    },
     /// Run pending processors; --rebuild re-derives everything from the vault
     Process {
         #[arg(long)]
@@ -121,6 +131,12 @@ enum Command {
     /// Raw objects in the vault
     #[command(subcommand)]
     Raw(RawCmd),
+    /// Ingested files and generic records, with their metadata
+    #[command(subcommand)]
+    Items(cmd_items::ItemsCmd),
+    /// Scheduled sync from MCP servers and command-line tools
+    #[command(subcommand)]
+    Sync(cmd_sync::SyncCmd),
     /// MCP server
     #[command(subcommand)]
     Mcp(McpCmd),
@@ -133,17 +149,6 @@ enum Command {
     /// Developer tools
     #[command(subcommand, hide = true)]
     Dev(DevCmd),
-}
-
-#[derive(Subcommand)]
-enum ImportCmd {
-    /// Apple Health export.zip (or export.xml) from Health → Export All Health Data
-    AppleHealth {
-        path: PathBuf,
-        /// Only store it; run `mirrorself process` later
-        #[arg(long)]
-        no_process: bool,
-    },
 }
 
 #[derive(Subcommand)]
@@ -258,10 +263,12 @@ fn run(cli: Cli) -> Result<()> {
 fn run_with_app(app: &App, command: Command, out: &dyn Fn(Value, fn(&Value) -> String)) -> Result<()> {
     let q = app.query();
     match command {
-        Command::Import(ImportCmd::AppleHealth { path, no_process }) => {
-            let report = app.import_file(ImportKind::AppleHealth, &path, !no_process)?;
+        Command::Import { source, path, no_process } => {
+            let report = app.import_file(&source, &path, !no_process)?;
             out(serde_json::to_value(&report)?, render::import);
         }
+        Command::Items(cmd) => cmd_items::run(app, cmd, out)?,
+        Command::Sync(cmd) => cmd_sync::run(app, cmd, out)?,
         Command::Process { rebuild } => {
             let report = app.process(rebuild)?;
             out(serde_json::to_value(&report)?, render::process);

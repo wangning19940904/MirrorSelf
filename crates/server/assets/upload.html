@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="referrer" content="no-referrer">
+<title>MirrorSelf upload</title>
+<style>
+  :root {
+    --bg: #f6f6f4;
+    --card: #ffffff;
+    --text: #1c1c1a;
+    --muted: #5f5f5a;
+    --line: #dcdcd6;
+    --accent: #1f5fbf;
+    --accent-text: #ffffff;
+    --ok: #1d7a3a;
+    --warn: #8a5a00;
+    --bad: #b3261e;
+    --bar: #d8e3f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141413;
+      --card: #1f1f1d;
+      --text: #ecece8;
+      --muted: #a8a8a1;
+      --line: #383834;
+      --accent: #6ea2f0;
+      --accent-text: #0d1726;
+      --ok: #6cc788;
+      --warn: #e0b04f;
+      --bad: #f2867d;
+      --bar: #26344a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 17px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "PingFang SC", "Noto Sans", sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  .brand { margin: 4px 0 0; color: var(--muted); font-size: 14px; letter-spacing: .02em; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 2px 0 16px; }
+  h2 { font-size: 19px; margin: 0 0 8px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin: 0 0 16px; }
+  p { margin: 0 0 12px; }
+  .muted { color: var(--muted); font-size: 15px; }
+  code { font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  label.field { display: block; font-weight: 600; margin-bottom: 6px; }
+  input[type=text] {
+    width: 100%; min-height: 56px; padding: 10px 14px;
+    font: 600 26px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .12em;
+    color: var(--text); background: var(--bg); border: 2px solid var(--line); border-radius: 10px;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+  .btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; min-height: 56px; padding: 12px 16px; margin-top: 12px;
+    font-family: inherit; font-size: 18px; font-weight: 600; line-height: 1.2;
+    color: var(--accent-text); background: var(--accent);
+    border: 2px solid var(--accent); border-radius: 12px; cursor: pointer;
+    -webkit-tap-highlight-color: transparent; user-select: none;
+  }
+  .btn.secondary { color: var(--accent); background: transparent; }
+  .btn:active { transform: translateY(1px); }
+  .btn[disabled] { opacity: .5; cursor: default; }
+  .btn:focus-visible, .link:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row .btn { margin-top: 0; }
+  .hidden-input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .msg { margin: 12px 0 0; font-weight: 600; }
+  .msg:empty { display: none; }
+  .msg.bad { color: var(--bad); }
+  .msg.ok { color: var(--ok); }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li.item { border-top: 1px solid var(--line); padding: 12px 0; }
+  li.item:first-child { border-top: 0; padding-top: 4px; }
+  .name { font-weight: 600; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 14px; }
+  .bar { height: 8px; border-radius: 4px; background: var(--bar); overflow: hidden; margin: 8px 0 4px; }
+  .bar > span { display: block; height: 100%; width: 0; background: var(--accent); transition: width .15s linear; }
+  .status { font-size: 15px; margin-top: 4px; overflow-wrap: anywhere; }
+  .status.ok { color: var(--ok); }
+  .status.warn { color: var(--warn); }
+  .status.bad { color: var(--bad); }
+  .item .btn { min-height: 48px; margin-top: 8px; font-size: 16px; }
+  .empty { color: var(--muted); font-size: 15px; }
+  .link { background: none; border: 0; padding: 12px 0; min-height: 48px; color: var(--accent); font: inherit; font-size: 15px; text-decoration: underline; cursor: pointer; }
+  footer { text-align: center; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <p class="brand">MirrorSelf</p>
+  <h1>Send files to your hub</h1>
+
+  <section id="pair" hidden>
+    <h2>Pair this phone</h2>
+    <p class="muted">On the computer running <code>mirrorself serve</code>, look for the 8-digit pairing code. Each code works once.</p>
+    <form id="pair-form" novalidate>
+      <label class="field" for="code">Pairing code</label>
+      <input id="code" name="code" type="text" inputmode="numeric" autocomplete="one-time-code"
+             autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="9" placeholder="1234-5678">
+      <button class="btn" id="pair-btn" type="submit">Pair</button>
+      <p class="msg" id="pair-msg" role="alert"></p>
+    </form>
+  </section>
+
+  <section id="send" hidden>
+    <h2>Add files</h2>
+    <p class="muted">Photos, PDFs, bill CSVs, a Health export. Files go to this hub only. Limit <span id="limit">—</span> per file.</p>
+    <div class="row">
+      <label class="btn" for="camera" role="button" tabindex="0">Take photo</label>
+      <label class="btn" for="files" role="button" tabindex="0">Choose files</label>
+    </div>
+    <input class="hidden-input" id="camera" type="file" accept="image/*" capture="environment" tabindex="-1">
+    <input class="hidden-input" id="files" type="file" multiple tabindex="-1">
+  </section>
+
+  <section id="list-section">
+    <h2>Uploads</h2>
+    <p class="empty" id="empty">Nothing sent yet.</p>
+    <ul id="queue" aria-live="polite"></ul>
+    <button class="btn secondary" id="retry-all" type="button" hidden>Retry failed uploads</button>
+  </section>
+
+  <footer>
+    <button class="link" id="unpair" type="button" hidden>Unpair this phone</button>
+  </footer>
+</main>
+
+<script>
+"use strict";
+(function () {
+  var STORE = "mirrorself-upload";
+  var KINDS = {
+    apple_health_export: "Apple Health export",
+    alipay_bill_csv: "Alipay bill",
+    feishu_calendar_events: "Feishu calendar",
+    file_pdf: "PDF document",
+    file_image: "Photo or image",
+    file_text: "Text file",
+    file_other: "File"
+  };
+  var auth = loadAuth();
+  var queue = [];
+  var running = false;
+  var nextId = 1;
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  function loadAuth() {
+    try {
+      var a = JSON.parse(sessionStorage.getItem(STORE) || "null");
+      if (a && a.session && a.expiresAt > Date.now()) return a;
+    } catch (e) { /* storage unavailable */ }
+    return null;
+  }
+  function saveAuth(a) {
+    auth = a;
+    try {
+      if (a) sessionStorage.setItem(STORE, JSON.stringify(a));
+      else sessionStorage.removeItem(STORE);
+    } catch (e) { /* the session still lives in memory */ }
+  }
+
+  function size(n) {
+    if (n < 1024) return n + " B";
+    if (n < 1024 * 1024) return (n / 1024).toFixed(0) + " KB";
+    if (n < 1024 * 1024 * 1024) return +(n / 1024 / 1024).toFixed(1) + " MB";
+    return +(n / 1024 / 1024 / 1024).toFixed(2) + " GB";
+  }
+
+  function render() {
+    var paired = !!auth;
+    $("pair").hidden = paired;
+    $("send").hidden = !paired;
+    $("unpair").hidden = !paired;
+    if (paired) $("limit").textContent = size(auth.maxBytes);
+    $("empty").hidden = queue.length > 0;
+    $("retry-all").hidden = !queue.some(function (i) { return i.state === "failed" && i.retryable; });
+  }
+
+  function addFiles(list) {
+    for (var k = 0; k < list.length; k++) {
+      var item = { id: nextId++, file: list[k], state: "queued", retryable: true };
+      item.el = buildRow(item);
+      $("queue").appendChild(item.el.li);
+      queue.push(item);
+      if (auth && list[k].size > auth.maxBytes) {
+        item.retryable = false;
+        setState(item, "failed", "Too large (" + size(list[k].size) + "); the limit is " + size(auth.maxBytes) + ".", "bad");
+      } else if (list[k].size === 0) {
+        item.retryable = false;
+        setState(item, "failed", "This file is empty.", "bad");
+      } else {
+        setState(item, "queued", "Waiting…", "");
+      }
+    }
+    render();
+    pump();
+  }
+
+  function buildRow(item) {
+    var li = document.createElement("li");
+    li.className = "item";
+    var name = document.createElement("div");
+    name.className = "name";
+    name.textContent = item.file.name || "photo";
+    var meta = document.createElement("div");
+    meta.className = "meta";
+    meta.textContent = size(item.file.size);
+    var bar = document.createElement("div");
+    bar.className = "bar";
+    var fill = document.createElement("span");
+    bar.appendChild(fill);
+    var status = document.createElement("div");
+    status.className = "status";
+    var retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "btn secondary";
+    retry.textContent = "Retry";
+    retry.hidden = true;
+    retry.addEventListener("click", function () { requeue(item); });
+    li.appendChild(name); li.appendChild(meta); li.appendChild(bar); li.appendChild(status); li.appendChild(retry);
+    return { li: li, fill: fill, bar: bar, status: status, retry: retry };
+  }
+
+  function setState(item, state, text, tone) {
+    item.state = state;
+    item.el.status.textContent = text;
+    item.el.status.className = "status" + (tone ? " " + tone : "");
+    item.el.retry.hidden = !(state === "failed" && item.retryable);
+    item.el.bar.hidden = !(state === "uploading" || state === "processing");
+    render();
+  }
+
+  function setProgress(item, fraction) {
+    item.el.fill.style.width = Math.round(fraction * 100) + "%";
+  }
+
+  function requeue(item) {
+    if (item.state !== "failed" || !item.retryable) return;
+    setProgress(item, 0);
+    setState(item, "queued", "Waiting…", "");
+    pump();
+  }
+
+  function send(item) {
+    return new Promise(function (resolve) {
+      var x = new XMLHttpRequest();
+      x.open("POST", "/v1/upload");
+      x.setRequestHeader("Authorization", "Bearer " + auth.session);
+      x.setRequestHeader("X-File-Name", encodeURIComponent(item.file.name || "photo.jpg"));
+      x.setRequestHeader("Content-Type", "application/octet-stream");
+      x.upload.onprogress = function (e) {
+        if (!e.lengthComputable) return;
+        setProgress(item, e.loaded / e.total);
+        if (e.loaded >= e.total) setState(item, "processing", "Processing on the hub…", "");
+        else setState(item, "uploading", "Uploading " + Math.round(100 * e.loaded / e.total) + "%", "");
+      };
+      x.onload = function () {
+        var body = {};
+        try { body = JSON.parse(x.responseText); } catch (e) { body = {}; }
+        resolve({ status: x.status, body: body });
+      };
+      x.onerror = function () { resolve({ status: 0, body: { error: "Could not reach the hub. Check that this phone is on the same network." } }); };
+      x.onabort = function () { resolve({ status: 0, body: { error: "The upload was cancelled." } }); };
+      x.send(item.file);
+    });
+  }
+
+  function describe(body) {
+    var kind = KINDS[body.kind] || body.kind || "file";
+    var text = body.created ? "Stored as " + kind + "." : "Already on the hub (" + kind + ").";
+    if (body.errors && body.errors.length) {
+      var first = body.errors[0];
+      return { text: text + " Processing reported a problem: " + (first.error || first.status), tone: "warn" };
+    }
+    return { text: text, tone: "ok" };
+  }
+
+  function pump() {
+    if (running || !auth) return;
+    var item = queue.find(function (i) { return i.state === "queued"; });
+    if (!item) return;
+    running = true;
+    setProgress(item, 0);
+    setState(item, "uploading", "Uploading 0%", "");
+    send(item).then(function (r) {
+      running = false;
+      if (r.status === 200 || r.status === 201) {
+        setProgress(item, 1);
+        var d = describe(r.body);
+        setState(item, "done", d.text, d.tone);
+      } else if (r.status === 401) {
+        saveAuth(null);
+        setState(item, "queued", "Waiting for pairing…", "");
+        showPairMessage(r.body.error || "Pair this phone again.", "bad");
+        render();
+        $("pair").scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      } else {
+        var final = { too_large: 1, empty: 1, bad_name: 1 };
+        item.retryable = !(r.body && final[r.body.code]);
+        setState(item, "failed", (r.body && r.body.error) || ("Upload failed (HTTP " + r.status + ")."), "bad");
+      }
+      pump();
+    });
+  }
+
+  function showPairMessage(text, tone) {
+    var m = $("pair-msg");
+    m.textContent = text;
+    m.className = "msg" + (tone ? " " + tone : "");
+  }
+
+  $("pair-form").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var code = $("code").value.replace(/\D/g, "");
+    if (code.length !== 8) {
+      showPairMessage("Enter all 8 digits.", "bad");
+      return;
+    }
+    var btn = $("pair-btn");
+    btn.disabled = true;
+    showPairMessage("", "");
+    fetch("/v1/pair", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: code }),
+      cache: "no-store"
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) { return { ok: res.ok, body: body }; });
+    }).then(function (r) {
+      btn.disabled = false;
+      if (!r.ok) {
+        showPairMessage(r.body.error || "Pairing failed.", "bad");
+        return;
+      }
+      $("code").value = "";
+      saveAuth({ session: r.body.session, maxBytes: r.body.max_bytes, expiresAt: Date.now() + r.body.expires_in * 1000 });
+      render();
+      pump();
+    }, function () {
+      btn.disabled = false;
+      showPairMessage("Could not reach the hub. Check that this phone is on the same network.", "bad");
+    });
+  });
+
+  $("code").addEventListener("input", function (e) {
+    var d = e.target.value.replace(/\D/g, "").slice(0, 8);
+    e.target.value = d.length > 4 ? d.slice(0, 4) + "-" + d.slice(4) : d;
+  });
+
+  ["camera", "files"].forEach(function (id) {
+    $(id).addEventListener("change", function (e) {
+      if (e.target.files && e.target.files.length) addFiles(e.target.files);
+      e.target.value = "";
+    });
+  });
+  document.querySelectorAll("label.btn").forEach(function (l) {
+    l.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $(l.htmlFor).click(); }
+    });
+  });
+
+  $("retry-all").addEventListener("click", function () { queue.forEach(requeue); });
+
+  $("unpair").addEventListener("click", function () {
+    var a = auth;
+    saveAuth(null);
+    render();
+    showPairMessage("This phone is unpaired.", "ok");
+    if (a) {
+      fetch("/v1/unpair", { method: "POST", headers: { Authorization: "Bearer " + a.session } }).catch(function () {});
+    }
+  });
+
+  render();
+  if (auth) {
+    // The hub keeps sessions in memory: after a restart this one is gone.
+    fetch("/v1/session", { headers: { Authorization: "Bearer " + auth.session }, cache: "no-store" })
+      .then(function (res) {
+        if (res.status === 401) { saveAuth(null); render(); return null; }
+        return res.ok ? res.json() : null;
+      })
+      .then(function (body) {
+        if (body && auth) {
+          saveAuth({ session: auth.session, maxBytes: body.max_bytes, expiresAt: Date.now() + body.expires_in * 1000 });
+          render();
+        }
+      }, function () { /* offline: keep the session and let uploads report it */ });
+  }
+})();
+</script>
+</body>
+</html>

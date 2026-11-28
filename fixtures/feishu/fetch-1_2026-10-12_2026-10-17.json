@@ -1,0 +1,665 @@
+{
+  "ok": true,
+  "identity": "user",
+  "data": {
+    "items": [
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000002&originalTime=0&startTime=1791772200",
+        "attendee_ability": "can_invite_others",
+        "attendees": [
+          {
+            "attendee_id": "resource_000000000000000000000000000r0002",
+            "display_name": "F5-Vega (12)",
+            "is_organizer": false,
+            "room_id": "omm_000000000000000000000000000r0002",
+            "rsvp_status": "accept",
+            "type": "resource"
+          },
+          {
+            "attendee_id": "resource_000000000000000000000000000r0003",
+            "display_name": "F2-Lyra (4)",
+            "is_organizer": false,
+            "room_id": "omm_000000000000000000000000000r0003",
+            "rsvp_status": "decline",
+            "type": "resource"
+          }
+        ],
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1791775800",
+          "timezone": "Asia/Shanghai"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000002_0",
+        "event_organizer": {
+          "display_name": "Mara Okafor",
+          "user_id": "ou_0000000000000000000000000000a002"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "timestamp": "1791772200",
+          "timezone": "Asia/Shanghai"
+        },
+        "status": "confirmed",
+        "summary": "Design review: onboarding flow",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000002",
+          "vc_type": "vc"
+        },
+        "visibility": "default",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000001&originalTime=1791770400&startTime=1791770400",
+        "attendee_ability": "can_invite_others",
+        "attendees": [
+          {
+            "attendee_id": "resource_000000000000000000000000000r0001",
+            "display_name": "F3-Orion (8)",
+            "is_organizer": false,
+            "room_id": "omm_000000000000000000000000000r0001",
+            "rsvp_status": "accept",
+            "type": "resource"
+          }
+        ],
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1791774000",
+          "timezone": "Asia/Shanghai"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000001_1791770400",
+        "event_organizer": {
+          "display_name": "Lin Qiao",
+          "user_id": "ou_0000000000000000000000000000a001"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "timestamp": "1791770400",
+          "timezone": "Asia/Shanghai"
+        },
+        "status": "confirmed",
+        "summary": "Weekly platform sync",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000001",
+          "vc_type": "vc"
+        },
+        "visibility": "default",
+        "recurring_event_id": "5e1a0c00-0000-4000-8000-000000000001_0",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000003&originalTime=0&startTime=1791871200",
+        "attendee_ability": "can_invite_others",
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1791873000",
+          "timezone": "Asia/Shanghai"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000003_0",
+        "event_organizer": {
+          "display_name": "Avery Chen",
+          "user_id": "ou_0000000000000000000000000000a003"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "needs_action",
+        "start_time": {
+          "timestamp": "1791871200",
+          "timezone": "Asia/Shanghai"
+        },
+        "status": "confirmed",
+        "summary": "1:1 Avery / Demo",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000003",
+          "vc_type": "vc"
+        },
+        "visibility": "default",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000004&originalTime=0&startTime=1791903600",
+        "attendee_ability": "can_modify_event",
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1791910800",
+          "timezone": "Asia/Shanghai"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000004_0",
+        "event_organizer": {
+          "display_name": "Demo User",
+          "user_id": "ou_0000000000000000000000000000d001"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "timestamp": "1791903600",
+          "timezone": "Asia/Shanghai"
+        },
+        "status": "confirmed",
+        "summary": "Release window v2.14",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000004",
+          "vc_type": "vc"
+        },
+        "visibility": "default",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000006&originalTime=0&startTime=1791939600",
+        "attendee_ability": "can_invite_others",
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1791942300",
+          "timezone": "Asia/Shanghai"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000006_0",
+        "event_organizer": {
+          "display_name": "Sam Ito",
+          "user_id": "ou_0000000000000000000000000000a005"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "decline",
+        "start_time": {
+          "timestamp": "1791939600",
+          "timezone": "Asia/Shanghai"
+        },
+        "status": "confirmed",
+        "summary": "Vendor demo",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000006",
+          "vc_type": "vc"
+        },
+        "visibility": "default",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000005&originalTime=0&startTime=0",
+        "attendee_ability": "can_invite_others",
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "date": "2026-10-14",
+          "timezone": "UTC"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000005_0",
+        "event_organizer": {
+          "display_name": "Jordan Li",
+          "user_id": "ou_0000000000000000000000000000a004"
+        },
+        "free_busy_status": "free",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "date": "2026-10-14",
+          "timezone": "UTC"
+        },
+        "status": "confirmed",
+        "summary": "Team offsite",
+        "vchat": {
+          "vc_type": "no_meeting"
+        },
+        "visibility": "default",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000007&originalTime=0&startTime=1791961200",
+        "attendee_ability": "can_invite_others",
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1791964800",
+          "timezone": "Asia/Shanghai"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000007_0",
+        "event_organizer": {
+          "display_name": "Riley Novak",
+          "user_id": "ou_0000000000000000000000000000a006"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "timestamp": "1791961200",
+          "timezone": "Asia/Shanghai"
+        },
+        "status": "cancelled",
+        "summary": "Budget planning",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000007",
+          "vc_type": "vc"
+        },
+        "visibility": "default",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000008&originalTime=0&startTime=1792022400",
+        "attendee_ability": "can_invite_others",
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1792026000",
+          "timezone": "America/Los_Angeles"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000008_0",
+        "event_organizer": {
+          "display_name": "Quinn Zhao",
+          "user_id": "ou_0000000000000000000000000000a007"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "timestamp": "1792022400",
+          "timezone": "America/Los_Angeles"
+        },
+        "status": "confirmed",
+        "summary": "Partner sync (US)",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000008",
+          "vc_type": "third_party"
+        },
+        "visibility": "default",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000001&originalTime=1792029600&startTime=1792029600",
+        "attendee_ability": "can_invite_others",
+        "attendees": [
+          {
+            "attendee_id": "resource_000000000000000000000000000r0001",
+            "display_name": "F3-Orion (8)",
+            "is_organizer": false,
+            "room_id": "omm_000000000000000000000000000r0001",
+            "rsvp_status": "accept",
+            "type": "resource"
+          }
+        ],
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1792033200",
+          "timezone": "Asia/Shanghai"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000001_1792029600",
+        "event_organizer": {
+          "display_name": "Lin Qiao",
+          "user_id": "ou_0000000000000000000000000000a001"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "timestamp": "1792029600",
+          "timezone": "Asia/Shanghai"
+        },
+        "status": "confirmed",
+        "summary": "Weekly platform sync",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000001",
+          "vc_type": "vc"
+        },
+        "visibility": "default",
+        "recurring_event_id": "5e1a0c00-0000-4000-8000-000000000001_0",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000009&originalTime=0&startTime=1792044000",
+        "attendee_ability": "can_modify_event",
+        "attendees": [
+          {
+            "attendee_id": "resource_000000000000000000000000000r0001",
+            "display_name": "F3-Orion (8)",
+            "is_organizer": false,
+            "room_id": "omm_000000000000000000000000000r0001",
+            "rsvp_status": "accept",
+            "type": "resource"
+          }
+        ],
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1792047600",
+          "timezone": "Asia/Shanghai"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-000000000009_0",
+        "event_organizer": {
+          "display_name": "Demo User",
+          "user_id": "ou_0000000000000000000000000000d001"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "timestamp": "1792044000",
+          "timezone": "Asia/Shanghai"
+        },
+        "status": "confirmed",
+        "summary": "Architecture review",
+        "vchat": {
+          "meeting_url": "https://vc.feishu.cn/j/000000009",
+          "vc_type": "vc"
+        },
+        "visibility": "default",
+        "description_rich": ""
+      },
+      {
+        "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-00000000000a&originalTime=0&startTime=1792112400",
+        "attendee_ability": "can_invite_others",
+        "color": -1,
+        "description": "",
+        "end_time": {
+          "timestamp": "1792116000",
+          "timezone": "Asia/Tokyo"
+        },
+        "event_id": "5e1a0c00-0000-4000-8000-00000000000a_0",
+        "event_organizer": {
+          "display_name": "Haru Sato",
+          "user_id": "ou_0000000000000000000000000000a008"
+        },
+        "free_busy_status": "busy",
+        "is_exception": false,
+        "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+        "self_rsvp_status": "accept",
+        "start_time": {
+          "timestamp": "1792112400",
+          "timezone": "Asia/Tokyo"
+        },
+        "status": "confirmed",
+        "summary": "Tokyo office hours",
+        "vchat": {
+          "vc_type": "no_meeting"
+        },
+        "visibility": "default",
+        "location": {
+          "address": "1-2-3 Example-cho, Chiyoda-ku",
+          "latitude": 35.68,
+          "longitude": 139.76,
+          "name": "Tokyo office, 12F"
+        },
+        "description_rich": ""
+      }
+    ]
+  }
+}
+{
+  "ok": true,
+  "identity": "user",
+  "data": {
+    "event": {
+      "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000001&originalTime=1791770400&startTime=1791770400",
+      "attendee_ability": "can_invite_others",
+      "attendees": [
+        {
+          "attendee_id": "user_0000000000000000000000000000a001",
+          "display_name": "Lin Qiao",
+          "is_organizer": true,
+          "rsvp_status": "accept",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000a001"
+        },
+        {
+          "attendee_id": "user_0000000000000000000000000000d001",
+          "display_name": "Demo User",
+          "is_organizer": false,
+          "rsvp_status": "accept",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000d001"
+        },
+        {
+          "attendee_id": "user_0000000000000000000000000000a004",
+          "display_name": "Jordan Li",
+          "is_organizer": false,
+          "rsvp_status": "accept",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000a004",
+          "is_optional": true
+        },
+        {
+          "attendee_id": "resource_000000000000000000000000000r0001",
+          "display_name": "F3-Orion (8)",
+          "is_organizer": false,
+          "room_id": "omm_000000000000000000000000000r0001",
+          "rsvp_status": "accept",
+          "type": "resource"
+        }
+      ],
+      "color": -1,
+      "create_time": "1759000000",
+      "description": "",
+      "end_time": {
+        "timestamp": "1791774000",
+        "timezone": "Asia/Shanghai"
+      },
+      "event_id": "5e1a0c00-0000-4000-8000-000000000001_1791770400",
+      "event_organizer": {
+        "display_name": "Lin Qiao",
+        "user_id": "ou_0000000000000000000000000000a001"
+      },
+      "free_busy_status": "busy",
+      "has_more_attendee": false,
+      "is_exception": false,
+      "is_external": false,
+      "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+      "recurrence": "",
+      "recurring_event_id": "5e1a0c00-0000-4000-8000-000000000001_0",
+      "reminders": [
+        {
+          "minutes": 5
+        }
+      ],
+      "self_rsvp_status": "accept",
+      "start_time": {
+        "timestamp": "1791770400",
+        "timezone": "Asia/Shanghai"
+      },
+      "status": "confirmed",
+      "summary": "Weekly platform sync",
+      "vchat": {
+        "meeting_url": "https://vc.feishu.cn/j/000000001",
+        "vc_type": "vc"
+      },
+      "visibility": "default"
+    }
+  }
+}
+{
+  "ok": true,
+  "identity": "user",
+  "data": {
+    "event": {
+      "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000002&originalTime=0&startTime=1791772200",
+      "attendee_ability": "can_invite_others",
+      "attendees": [
+        {
+          "attendee_id": "user_0000000000000000000000000000a002",
+          "display_name": "Mara Okafor",
+          "is_organizer": true,
+          "rsvp_status": "accept",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000a002"
+        },
+        {
+          "attendee_id": "user_0000000000000000000000000000d001",
+          "display_name": "Demo User",
+          "is_organizer": false,
+          "rsvp_status": "accept",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000d001"
+        },
+        {
+          "attendee_id": "user_0000000000000000000000000000a003",
+          "display_name": "Avery Chen",
+          "is_organizer": false,
+          "rsvp_status": "tentative",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000a003"
+        },
+        {
+          "attendee_id": "resource_000000000000000000000000000r0002",
+          "display_name": "F5-Vega (12)",
+          "is_organizer": false,
+          "room_id": "omm_000000000000000000000000000r0002",
+          "rsvp_status": "accept",
+          "type": "resource"
+        },
+        {
+          "attendee_id": "resource_000000000000000000000000000r0003",
+          "display_name": "F2-Lyra (4)",
+          "is_organizer": false,
+          "room_id": "omm_000000000000000000000000000r0003",
+          "rsvp_status": "decline",
+          "type": "resource"
+        }
+      ],
+      "color": -1,
+      "create_time": "1759100000",
+      "description": "",
+      "end_time": {
+        "timestamp": "1791775800",
+        "timezone": "Asia/Shanghai"
+      },
+      "event_id": "5e1a0c00-0000-4000-8000-000000000002_0",
+      "event_organizer": {
+        "display_name": "Mara Okafor",
+        "user_id": "ou_0000000000000000000000000000a002"
+      },
+      "free_busy_status": "busy",
+      "has_more_attendee": false,
+      "is_exception": false,
+      "is_external": false,
+      "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+      "recurrence": "",
+      "reminders": [
+        {
+          "minutes": 5
+        }
+      ],
+      "self_rsvp_status": "accept",
+      "start_time": {
+        "timestamp": "1791772200",
+        "timezone": "Asia/Shanghai"
+      },
+      "status": "confirmed",
+      "summary": "Design review: onboarding flow",
+      "vchat": {
+        "meeting_url": "https://vc.feishu.cn/j/000000002",
+        "vc_type": "vc"
+      },
+      "visibility": "default"
+    }
+  }
+}
+{
+  "ok": true,
+  "identity": "user",
+  "data": {
+    "event": {
+      "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=0000000000000000001&key=5e1a0c00-0000-4000-8000-000000000009&originalTime=0&startTime=1792044000",
+      "attendee_ability": "can_modify_event",
+      "attendees": [
+        {
+          "attendee_id": "user_0000000000000000000000000000d001",
+          "display_name": "Demo User",
+          "is_organizer": true,
+          "rsvp_status": "accept",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000d001"
+        },
+        {
+          "attendee_id": "user_0000000000000000000000000000a001",
+          "display_name": "Lin Qiao",
+          "is_organizer": false,
+          "rsvp_status": "accept",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000a001"
+        },
+        {
+          "attendee_id": "user_0000000000000000000000000000a002",
+          "display_name": "Mara Okafor",
+          "is_organizer": false,
+          "rsvp_status": "tentative",
+          "type": "user",
+          "user_id": "ou_0000000000000000000000000000a002"
+        },
+        {
+          "attendee_id": "chat_0000000000000000000000000c0001",
+          "chat_id": "oc_000000000000000000000000000c0001",
+          "display_name": "Platform team",
+          "rsvp_status": "needs_action",
+          "type": "chat"
+        },
+        {
+          "attendee_id": "third_party_0000000000000000000000t0001",
+          "display_name": "Partner Contact",
+          "is_external": true,
+          "rsvp_status": "needs_action",
+          "third_party_email": "partner.contact@example.com",
+          "type": "third_party"
+        },
+        {
+          "attendee_id": "resource_000000000000000000000000000r0001",
+          "display_name": "F3-Orion (8)",
+          "is_organizer": false,
+          "room_id": "omm_000000000000000000000000000r0001",
+          "rsvp_status": "accept",
+          "type": "resource"
+        }
+      ],
+      "color": -1,
+      "create_time": "1759200000",
+      "description": "",
+      "end_time": {
+        "timestamp": "1792047600",
+        "timezone": "Asia/Shanghai"
+      },
+      "event_id": "5e1a0c00-0000-4000-8000-000000000009_0",
+      "event_organizer": {
+        "display_name": "Demo User",
+        "user_id": "ou_0000000000000000000000000000d001"
+      },
+      "free_busy_status": "busy",
+      "has_more_attendee": false,
+      "is_exception": false,
+      "is_external": false,
+      "organizer_calendar_id": "feishu.cn_demo000000000000000000@group.calendar.feishu.cn",
+      "recurrence": "",
+      "reminders": [
+        {
+          "minutes": 5
+        }
+      ],
+      "self_rsvp_status": "accept",
+      "start_time": {
+        "timestamp": "1792044000",
+        "timezone": "Asia/Shanghai"
+      },
+      "status": "confirmed",
+      "summary": "Architecture review",
+      "vchat": {
+        "meeting_url": "https://vc.feishu.cn/j/000000009",
+        "vc_type": "vc"
+      },
+      "visibility": "default"
+    }
+  }
+}

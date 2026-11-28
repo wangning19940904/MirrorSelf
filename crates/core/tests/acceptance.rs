@@ -6,7 +6,7 @@ use mirrorself_core::config::Home;
 use mirrorself_core::error::user_error;
 use mirrorself_core::query::{QueryService, SearchQuery, SeriesQuery, TimelineQuery};
 use mirrorself_core::synth::{self, SynthOptions};
-use mirrorself_core::{App, ImportKind, UserError};
+use mirrorself_core::{App, UserError};
 use serde_json::{json, Value};
 
 const FIXTURE: &[u8] = include_bytes!("../../../fixtures/apple-health/export.xml");
@@ -20,7 +20,7 @@ fn new_app() -> (tempfile::TempDir, App) {
 
 fn import(app: &App, bytes: &[u8], name: &str) -> mirrorself_core::ImportReport {
     let report = app
-        .import_bytes(ImportKind::AppleHealth, Some(name.into()), bytes, true)
+        .import_bytes("apple-health", Some(name.into()), bytes, true)
         .unwrap();
     if let Some(p) = &report.process {
         let errors: Vec<_> = p.errors().collect();

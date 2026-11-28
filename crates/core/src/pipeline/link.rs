@@ -8,6 +8,7 @@ use anyhow::Result;
 use rusqlite::{params, Connection};
 use serde_json::{json, Value};
 
+use crate::codes::RECORD_CATEGORIES;
 use crate::ids::stable_id;
 
 pub(super) fn run(conn: &Connection) -> Result<Value> {
@@ -26,8 +27,13 @@ pub(super) fn run(conn: &Connection) -> Result<Value> {
     };
 
     let sources: Vec<String> = conn
-        .prepare("SELECT DISTINCT source_name FROM observations WHERE source_name IS NOT NULL ORDER BY source_name")?
-        .query_map([], |r| r.get(0))?
+        .prepare(
+            "SELECT DISTINCT o.source_name FROM observations o JOIN codes c ON c.code = o.code
+             WHERE o.source_name IS NOT NULL
+               AND c.category_id NOT IN (SELECT value FROM json_each(?1))
+             ORDER BY o.source_name",
+        )?
+        .query_map([serde_json::to_string(RECORD_CATEGORIES)?], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     for name in &sources {
         add_entity("device", name)?;
@@ -69,6 +75,10 @@ pub(super) fn index_search(conn: &Connection) -> Result<Value> {
            FROM events;
          INSERT INTO search_fts (kind, ref_id, local_date, title, body)
            SELECT 'entity', id, NULL, name, kind || ' ' || aliases FROM entities;
+         INSERT INTO search_fts (kind, ref_id, local_date, title, body)
+           SELECT 'item', id, local_date, coalesce(title, type),
+                  type || ' ' || coalesce(subtype, '') || ' ' || coalesce(place, '') || ' ' || coalesce(text, '')
+           FROM items WHERE status != 'rejected';
          INSERT INTO search_fts (kind, ref_id, local_date, title, body)
            SELECT 'metric', code, NULL, display, code || ' ' || coalesce(display_zh, '') || ' ' || category_id
            FROM codes;",
